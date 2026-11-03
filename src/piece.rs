@@ -1,3 +1,5 @@
+use std::fmt;
+
 /// The color of a piece or a player.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Color {
@@ -55,5 +57,12 @@ impl Piece {
             Color::White => letter,
             Color::Black => letter.to_ascii_lowercase(),
         }
+    }
+}
+
+impl fmt::Display for Piece {
+    ///Shows the piece as its letter
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.symbol())
     }
 }

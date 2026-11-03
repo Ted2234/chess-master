@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::piece::{Color, Piece, PieceKind};
 
 /// The order of pieces on the back rank, from file a to file h.
@@ -54,18 +56,21 @@ impl Board {
     pub fn set(&mut self, rank: usize, file: usize, piece: Option<Piece>) {
         self.squares[rank][file] = piece;
     }
+}
 
-    /// Prints the board with rank 8 at the top. Empty squares are shown as `.`.
-    pub fn print(&self) {
+impl fmt::Display for Board {
+    ///Draws the board as text, rank 8 at the top, with rank and file label
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for rank in (0..8).rev() {
+            write!(f, "{}", rank + 1)?;
             for file in 0..8 {
-                let c = match self.get(rank, file) {
-                    Some(piece) => piece.symbol(),
-                    None => '.',
-                };
-                print!("{c} ");
+                match self.get(rank, file) {
+                    Some(piece) => write!(f, " {piece}")?,
+                    None => write!(f, " .")?,
+                }
             }
-            println!();
+            writeln!(f)?;
         }
+        write!(f, "  a b c d e f g h")
     }
 }
