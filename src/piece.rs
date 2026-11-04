@@ -1,13 +1,16 @@
 use std::fmt;
 
 /// The color of a piece or a player.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Color {
     White,
     Black,
 }
 
 impl Color {
+    /// Both colors, White first.
+    pub const ALL: [Color; 2] = [Color::White, Color::Black];
+
     /// Returns the other color (White -> Black, Black -> White).
     pub fn opposite(self) -> Color {
         match self {
@@ -18,7 +21,7 @@ impl Color {
 }
 
 /// The type of a chess piece.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PieceKind {
     Pawn,
     Knight,
@@ -28,8 +31,20 @@ pub enum PieceKind {
     King,
 }
 
+impl PieceKind {
+    ///All six kind of pieces.
+    pub const ALL: [PieceKind; 6] = [
+        PieceKind::Pawn,
+        PieceKind::Knight,
+        PieceKind::Bishop,
+        PieceKind::Rook,
+        PieceKind::Queen,
+        PieceKind::King,
+    ];
+}
+
 /// A chess piece: a color and a kind.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Piece {
     pub color: Color,
     pub kind: PieceKind,

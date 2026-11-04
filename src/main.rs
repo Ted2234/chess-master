@@ -17,6 +17,6 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "chess-master",
         options,
-        Box::new(|cc| Ok(Box::new(ChessApp::new(cc)))),
+        Box::new(|cc| Ok(Box::new(ChessApp::new(cc)?))),
     )
 }
