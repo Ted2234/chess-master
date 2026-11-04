@@ -1,3 +1,4 @@
+use crate::square::Square;
 use std::fmt;
 
 use crate::piece::{Color, Piece, PieceKind};
@@ -55,6 +56,15 @@ impl Board {
     /// Places a piece on the given square, or clears it with `None`.
     pub fn set(&mut self, rank: usize, file: usize, piece: Option<Piece>) {
         self.squares[rank][file] = piece;
+    }
+
+    /// Moves whatever is on 'from' to 'to', replacing anything that was there.
+    ///
+    /// No chess rule are checked yet.
+    pub fn move_piece(&mut self, from: Square, to: Square) {
+        let piece = self.get(from.rank, from.file);
+        self.set(from.rank, from.file, None);
+        self.set(to.rank, to.file, piece);
     }
 }
 

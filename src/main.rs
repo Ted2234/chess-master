@@ -1,5 +1,6 @@
 mod board;
 mod piece;
+mod square;
 mod ui;
 
 use eframe::egui;

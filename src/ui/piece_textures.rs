@@ -16,7 +16,6 @@ impl PieceTextures {
     /// Decodes every piece image and uploars it to the graphics card.
     pub fn load(ctx: &egui::Context) -> Result<Self, image::ImageError> {
         let mut textures = HashMap::new();
-
         for color in Color::ALL {
             for kind in PieceKind::ALL {
                 let piece = Piece::new(color, kind);
