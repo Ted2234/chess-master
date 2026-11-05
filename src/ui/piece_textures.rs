@@ -1,9 +1,6 @@
 use std::collections::HashMap;
 
-use eframe::{
-    egui::{self, ColorImage, TextureHandle, TextureId, TextureOptions},
-    epaint::textures,
-};
+use eframe::egui::{self, ColorImage, TextureHandle, TextureId, TextureOptions};
 
 use crate::piece::{Color, Piece, PieceKind};
 

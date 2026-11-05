@@ -11,18 +11,26 @@ const SELECTED: Color32 = Color32::from_rgba_unmultiplied_const(255, 255, 0, 90)
 struct Layout {
     origin: Pos2,
     square_size: f32,
+    flipped: bool,
 }
 
 impl Layout {
     /// Converts a screen column and row to a board square.
     fn square_from_screen(&self, col: usize, row: usize) -> Square {
-        Square::new(7 - row, col)
+        if self.flipped {
+            Square::new(row, 7 - col)
+        } else {
+            Square::new(7 - row, col)
+        }
     }
 
     ///Returns the screen rectangle of a square
     fn square_rect(&self, square: Square) -> Rect {
-        let col = square.file;
-        let row = 7 - square.rank;
+        let (col, row) = if self.flipped {
+            (7 - square.file, square.rank)
+        } else {
+            (square.file, 7 - square.rank)
+        };
         let min = self.origin + Vec2::new(col as f32, row as f32) * self.square_size;
         Rect::from_min_size(min, Vec2::splat(self.square_size))
     }
@@ -44,12 +52,14 @@ pub fn draw_board(
     board: &Board,
     textures: &PieceTextures,
     selected: Option<Square>,
+    flipped: bool,
 ) -> Option<Square> {
     let size = ui.available_size().min_elem();
     let (response, painter) = ui.allocate_painter(Vec2::splat(size), Sense::click());
     let layout = Layout {
         origin: response.rect.min,
         square_size: size / 8.0,
+        flipped,
     };
 
     draw_squares(&painter, &layout);
