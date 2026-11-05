@@ -3,50 +3,75 @@ use std::time::Duration;
 use eframe::egui;
 
 use crate::board::Board;
-use crate::clock::{self, Clock, TimeControl};
+use crate::clock::{self, Clock};
 use crate::piece::Color;
 use crate::square::Square;
 use crate::ui::board_view;
+use crate::ui::menu::{self, GameSettings};
 use crate::ui::piece_textures::PieceTextures;
 
-/// The whole application sits here.
+/// Which screen the app is showing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Screen {
+    Menu,
+    Game,
+}
+
+/// The whole application: everything the window needs to remember.
 pub struct ChessApp {
-    board: Board,
+    screen: Screen,
+    /// The choices made on the main menu.
+    settings: GameSettings,
     textures: PieceTextures,
+    board: Board,
+    /// Whose turn it is.
     turn: Color,
+    /// The square of the piece the player picked up, if any.
     selected: Option<Square>,
+    /// Every move played so far, as (from, to) pairs.
     moves: Vec<(Square, Square)>,
+    /// When true, the board is drawn with Black at the bottom.
     flipped: bool,
-    time_control: TimeControl,
     clock: Clock,
+    /// Why the game ended, or `None` while it's still being played.
     game_over: Option<String>,
 }
 
 impl ChessApp {
-    ///Creates the app.
+    /// Creates the app. Called once by eframe when the window opens.
+    ///
+    /// Fails if one of the piece images can't be decoded.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Result<Self, image::ImageError> {
-        let time_control = TimeControl::FiveMinutes;
+        let settings = GameSettings::default();
         Ok(Self {
-            board: Board::starting_position(),
+            screen: Screen::Menu,
+            settings,
             textures: PieceTextures::load(&cc.egui_ctx)?,
+            board: Board::starting_position(),
             turn: Color::White,
             selected: None,
             moves: Vec::new(),
             flipped: false,
-            time_control,
-            clock: Clock::new(time_control),
+            clock: Clock::new(settings.time_control),
             game_over: None,
         })
     }
 
-    /// Resets the board for a new game.
+    /// Starts a new game with the settings from the menu.
     fn new_game(&mut self) {
         self.board = Board::starting_position();
         self.turn = Color::White;
         self.selected = None;
         self.moves.clear();
-        self.clock = Clock::new(self.time_control);
+        self.clock = Clock::new(self.settings.time_control);
         self.game_over = None;
+        self.screen = Screen::Game;
+    }
+
+    /// Leaves the game and goes back to the main menu.
+    fn back_to_menu(&mut self) {
+        self.clock.stop();
+        self.screen = Screen::Menu;
     }
 
     /// Selects a piece, or moves the selected piece, depending on what was clicked.
@@ -69,7 +94,7 @@ impl ChessApp {
         }
     }
 
-    /// Moves a piece and passes the turn to the other player.
+    /// Moves a piece, records it, and passes the turn (and the clock) to the other player.
     fn make_move(&mut self, from: Square, to: Square) {
         self.board.move_piece(from, to);
         self.moves.push((from, to));
@@ -78,7 +103,7 @@ impl ChessApp {
         self.clock.start(self.turn);
     }
 
-    /// Ends game if a player ran out of time.
+    /// Ends the game if a player has run out of time.
     fn check_time(&mut self) {
         if self.game_over.is_some() {
             return;
@@ -93,17 +118,41 @@ impl ChessApp {
         }
     }
 
-    /// Draws the pannel in the right. Turn, buttons and move, list.
-    fn side_panel(&mut self, ui: &mut egui::Ui) {
-        ui.heading("chess-master");
-        ui.separator();
+    /// Draws the game screen: the side panel and the board.
+    fn game_screen(&mut self, ui: &mut egui::Ui) {
+        self.check_time();
+        if self.clock.is_running() {
+            // Redraw regularly so the clock visibly counts down.
+            ui.ctx().request_repaint_after(Duration::from_millis(100));
+        }
 
-        ui.label("Time control (applies on New Game):");
-        ui.horizontal(|ui| {
-            for time_control in TimeControl::ALL {
-                ui.selectable_value(&mut self.time_control, time_control, time_control.label());
+        egui::Panel::right("side_panel")
+            .resizable(false)
+            .exact_size(260.0)
+            .show(ui, |ui| self.side_panel(ui));
+
+        egui::CentralPanel::default().show(ui, |ui| {
+            let clicked = board_view::draw_board(
+                ui,
+                &self.board,
+                &self.textures,
+                self.selected,
+                self.flipped,
+            );
+            if let Some(square) = clicked {
+                self.handle_click(square);
             }
         });
+    }
+
+    /// Draws the panel on the right: clocks, game status, buttons and the move list.
+    fn side_panel(&mut self, ui: &mut egui::Ui) {
+        ui.heading("chess-master");
+        ui.label(format!(
+            "{} · {}",
+            self.settings.mode.label(),
+            self.settings.time_control.label()
+        ));
         ui.separator();
 
         // The clock of the player at the top of the board is shown first.
@@ -114,6 +163,7 @@ impl ChessApp {
         };
         self.clock_label(ui, top);
         self.clock_label(ui, bottom);
+        ui.separator();
 
         match &self.game_over {
             Some(message) => {
@@ -125,11 +175,14 @@ impl ChessApp {
         }
 
         ui.horizontal(|ui| {
-            if ui.button("New Game").clicked() {
+            if ui.button("New game").clicked() {
                 self.new_game();
             }
             if ui.button("Flip board").clicked() {
                 self.flipped = !self.flipped;
+            }
+            if ui.button("Main menu").clicked() {
+                self.back_to_menu();
             }
         });
 
@@ -145,10 +198,9 @@ impl ChessApp {
                 ui.monospace(format!("{:>3}. {white:<6} {black}", number + 1));
             }
         });
-        ui.label(format!("Moves played: {}", self.moves.len()));
     }
 
-    /// Shows one player's clock. The clock of the side move is highlighted.
+    /// Shows one player's clock. The clock of the side to move is highlighted.
     fn clock_label(&self, ui: &mut egui::Ui, color: Color) {
         let time = clock::format_time(self.clock.remaining(color));
         let mut text = egui::RichText::new(format!("{color:?}  {time}"))
@@ -164,28 +216,15 @@ impl ChessApp {
 impl eframe::App for ChessApp {
     /// Called every frame to draw the window.
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        self.check_time();
-        if self.clock.is_running() {
-            // Redraw regurarly so the clock counts down.
-            ui.ctx().request_repaint_after(Duration::from_millis(100));
-        }
-
-        egui::Panel::right("side_panel")
-            .resizable(false)
-            .exact_size(220.0)
-            .show(ui, |ui| self.side_panel(ui));
-
-        egui::CentralPanel::default().show(ui, |ui| {
-            let clicked = board_view::draw_board(
-                ui,
-                &self.board,
-                &self.textures,
-                self.selected,
-                self.flipped,
-            );
-            if let Some(square) = clicked {
-                self.handle_click(square);
+        match self.screen {
+            Screen::Menu => {
+                egui::CentralPanel::default().show(ui, |ui| {
+                    if menu::draw_menu(ui, &mut self.settings) {
+                        self.new_game();
+                    }
+                });
             }
-        });
+            Screen::Game => self.game_screen(ui),
+        }
     }
 }
