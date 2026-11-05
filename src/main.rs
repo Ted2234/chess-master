@@ -1,4 +1,5 @@
 mod board;
+mod clock;
 mod piece;
 mod square;
 mod ui;
