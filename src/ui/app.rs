@@ -46,6 +46,7 @@ impl ChessApp {
         self.board.move_piece(from, to);
         self.turn = self.turn.opposite();
         self.selected = None;
+        println!("{from} -> {to}");
     }
 }
 
