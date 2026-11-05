@@ -1,4 +1,4 @@
-use eframe::egui::{self, RichText};
+use eframe::egui::{self, Color32, RichText};
 
 use crate::clock::TimeControl;
 
@@ -61,6 +61,13 @@ pub fn draw_menu(ui: &mut egui::Ui, settings: &mut GameSettings) -> bool {
 
         if ui.button(RichText::new("Start Game").size(24.0)).clicked() {
             start = true;
+        }
+
+        if ui
+            .button(RichText::new("Quit").size(24.0).color(Color32::RED))
+            .clicked()
+        {
+            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
         }
     });
     start
