@@ -81,8 +81,7 @@ pub fn draw_board(
 /// Paints the 64 light and dark squares.
 fn draw_squares(painter: &Painter, layout: &Layout) {
     for rank in 0..8 {
-        for file in 0..8 {
-            let square = Square::new(rank, file);
+        for square in Square::all() {
             painter.rect_filled(layout.square_rect(square), 0.0, square_color(square));
         }
     }
@@ -122,12 +121,10 @@ fn draw_pieces(painter: &Painter, layout: &Layout, board: &Board, textures: &Pie
     // Which part of the image to use: (0,0) is the top-left rcorner, (1,1) its bottom-right corner.
     let whole_image = Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0));
 
-    for rank in 0..8 {
-        for file in 0..8 {
-            if let Some(piece) = board.get(rank, file) {
-                let rect = layout.square_rect(Square::new(rank, file));
-                painter.image(textures.get(piece), rect, whole_image, Color32::WHITE);
-            }
+    for square in Square::all() {
+        if let Some(piece) = board.get(square) {
+            let rect = layout.square_rect(square);
+            painter.image(textures.get(piece), rect, whole_image, Color32::WHITE);
         }
     }
 }

@@ -56,6 +56,26 @@ impl Piece {
         Self { color, kind }
     }
 
+    /// Reads a piece from it's letter (the reverse of a symbol): `'N'` is a white Knight
+    /// `'q'` is a black Queen. Returns `None` for any other character.
+    pub fn from_symbol(symbol: char) -> Option<Piece> {
+        let kind = match symbol.to_ascii_uppercase() {
+            'P' => PieceKind::Pawn,
+            'N' => PieceKind::Knight,
+            'B' => PieceKind::Bishop,
+            'R' => PieceKind::Rook,
+            'Q' => PieceKind::Queen,
+            'K' => PieceKind::King,
+            _ => return None,
+        };
+        let color = if symbol.is_ascii_uppercase() {
+            Color::White
+        } else {
+            Color::Black
+        };
+        Some(Piece::new(color, kind))
+    }
+
     /// Returns the piece's letter: uppercase for White, lowercase for Black.
     pub fn symbol(self) -> char {
         // Step A: pick the uppercase letter based on the kind.
@@ -79,5 +99,26 @@ impl fmt::Display for Piece {
     ///Shows the piece as its letter
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.symbol())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn symbol_round_trip() {
+        for color in Color::ALL {
+            for kind in PieceKind::ALL {
+                let piece = Piece::new(color, kind);
+                assert_eq!(Piece::from_symbol(piece.symbol()), Some(piece));
+            }
+        }
+    }
+
+    #[test]
+    fn unknown_symbols_are_rejected() {
+        assert_eq!(Piece::from_symbol('x'), None);
+        assert_eq!(Piece::from_symbol('1'), None);
     }
 }

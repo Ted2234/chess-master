@@ -2,9 +2,9 @@ use std::time::Duration;
 
 use eframe::egui;
 
-use crate::board::Board;
 use crate::clock::{self, Clock};
 use crate::piece::Color;
+use crate::position::Position;
 use crate::square::Square;
 use crate::ui::board_view;
 use crate::ui::menu::{self, GameSettings};
@@ -23,9 +23,8 @@ pub struct ChessApp {
     /// The choices made on the main menu.
     settings: GameSettings,
     textures: PieceTextures,
-    board: Board,
-    /// Whose turn it is.
-    turn: Color,
+    /// The board, whose turn it is, castling rights, and so on.
+    position: Position,
     /// The square of the piece the player picked up, if any.
     selected: Option<Square>,
     /// Every move played so far, as (from, to) pairs.
@@ -47,8 +46,7 @@ impl ChessApp {
             screen: Screen::Menu,
             settings,
             textures: PieceTextures::load(&cc.egui_ctx)?,
-            board: Board::starting_position(),
-            turn: Color::White,
+            position: Position::starting(),
             selected: None,
             moves: Vec::new(),
             flipped: false,
@@ -59,8 +57,7 @@ impl ChessApp {
 
     /// Starts a new game with the settings from the menu.
     fn new_game(&mut self) {
-        self.board = Board::starting_position();
-        self.turn = Color::White;
+        self.position = Position::starting();
         self.selected = None;
         self.moves.clear();
         self.clock = Clock::new(self.settings.time_control);
@@ -81,9 +78,10 @@ impl ChessApp {
         }
 
         let clicked_own_piece = self
+            .position
             .board
-            .get(square.rank, square.file)
-            .is_some_and(|piece| piece.color == self.turn);
+            .get(square)
+            .is_some_and(|piece| piece.color == self.position.side_to_move);
 
         match self.selected {
             None if clicked_own_piece => self.selected = Some(square),
@@ -96,11 +94,11 @@ impl ChessApp {
 
     /// Moves a piece, records it, and passes the turn (and the clock) to the other player.
     fn make_move(&mut self, from: Square, to: Square) {
-        self.board.move_piece(from, to);
+        self.position.board.move_piece(from, to);
+        self.position.side_to_move = self.position.side_to_move.opposite();
         self.moves.push((from, to));
-        self.turn = self.turn.opposite();
         self.selected = None;
-        self.clock.start(self.turn);
+        self.clock.start(self.position.side_to_move);
     }
 
     /// Ends the game if a player has run out of time.
@@ -134,7 +132,7 @@ impl ChessApp {
         egui::CentralPanel::default().show(ui, |ui| {
             let clicked = board_view::draw_board(
                 ui,
-                &self.board,
+                &self.position.board,
                 &self.textures,
                 self.selected,
                 self.flipped,
@@ -170,7 +168,7 @@ impl ChessApp {
                 ui.colored_label(egui::Color32::RED, message);
             }
             None => {
-                ui.label(format!("{:?} to move", self.turn));
+                ui.label(format!("{:?} to move", self.position.side_to_move));
             }
         }
 
@@ -185,6 +183,16 @@ impl ChessApp {
                 self.back_to_menu();
             }
         });
+
+        ui.separator();
+        let fen = self.position.to_fen();
+        ui.horizontal(|ui| {
+            ui.strong("FEN");
+            if ui.small_button("Copy").clicked() {
+                ui.ctx().copy_text(fen.clone());
+            }
+        });
+        ui.add(egui::Label::new(egui::RichText::new(fen).monospace().small()).wrap());
 
         ui.separator();
         ui.strong("Moves");
@@ -206,7 +214,7 @@ impl ChessApp {
         let mut text = egui::RichText::new(format!("{color:?}  {time}"))
             .size(28.0)
             .monospace();
-        if color == self.turn && self.game_over.is_none() {
+        if color == self.position.side_to_move && self.game_over.is_none() {
             text = text.strong().color(egui::Color32::LIGHT_GREEN);
         }
         ui.label(text);
