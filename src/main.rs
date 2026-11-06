@@ -1,9 +1,11 @@
 mod board;
 mod clock;
+mod game;
 mod moves;
 mod piece;
 mod position;
 mod rules;
+mod san;
 mod square;
 mod ui;
 

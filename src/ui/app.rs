@@ -3,10 +3,10 @@ use std::time::Duration;
 use eframe::egui;
 
 use crate::clock::{self, Clock};
+use crate::game::{Game, GameResult};
 use crate::moves::Move;
 use crate::piece::{Color, Piece, PieceKind};
-use crate::position::Position;
-use crate::rules::{self, DrawReason, GameStatus};
+use crate::rules;
 use crate::square::Square;
 use crate::ui::board_view::{self, Highlights};
 use crate::ui::menu::{self, GameSettings};
@@ -25,19 +25,15 @@ pub struct ChessApp {
     /// The choices made on the main menu.
     settings: GameSettings,
     textures: PieceTextures,
-    /// The board, whose turn it is, castling rights, and so on.
-    position: Position,
+    /// The position, the move history and the result.
+    game: Game,
     /// The square of the piece the player picked up, if any.
     selected: Option<Square>,
-    /// A pawn move awaiting for the player to pick a promotion piece.
+    /// A pawn move waiting for the player to pick a promotion piece.
     pending_promotion: Option<(Square, Square)>,
-    /// Every move played so far.
-    moves: Vec<Move>,
     /// When true, the board is drawn with Black at the bottom.
     flipped: bool,
     clock: Clock,
-    /// Why the game ended, or `None` while it's still being played.
-    game_over: Option<String>,
 }
 
 impl ChessApp {
@@ -50,24 +46,20 @@ impl ChessApp {
             screen: Screen::Menu,
             settings,
             textures: PieceTextures::load(&cc.egui_ctx)?,
-            position: Position::starting(),
+            game: Game::new(),
             selected: None,
             pending_promotion: None,
-            moves: Vec::new(),
             flipped: false,
             clock: Clock::new(settings.time_control),
-            game_over: None,
         })
     }
 
     /// Starts a new game with the settings from the menu.
     fn new_game(&mut self) {
-        self.position = Position::starting();
+        self.game = Game::new();
         self.selected = None;
         self.pending_promotion = None;
-        self.moves.clear();
         self.clock = Clock::new(self.settings.time_control);
-        self.game_over = None;
         self.screen = Screen::Game;
     }
 
@@ -79,21 +71,21 @@ impl ChessApp {
 
     /// Selects a piece, or moves the selected piece, depending on what was clicked.
     fn handle_click(&mut self, square: Square) {
-        if self.game_over.is_some() || self.pending_promotion.is_some() {
+        if self.game.result().is_some() || self.pending_promotion.is_some() {
             return;
         }
 
-        let clicked_own_piece = self
-            .position
+        let position = self.game.position();
+        let clicked_own_piece = position
             .board
             .get(square)
-            .is_some_and(|piece| piece.color == self.position.side_to_move);
+            .is_some_and(|piece| piece.color == position.side_to_move);
 
         match self.selected {
             Some(from) if from == square => self.selected = None,
             _ if clicked_own_piece => self.selected = Some(square),
             Some(from) => {
-                // Only squares the selected piece can leaglly move to are accepted.
+                // Only squares the selected piece can legally move to are accepted.
                 let options: Vec<Move> = self
                     .moves_from(from)
                     .into_iter()
@@ -102,7 +94,7 @@ impl ChessApp {
                 match options.as_slice() {
                     [] => self.selected = None,
                     [mv] => self.play_move(*mv),
-                    // Several moves to the same square means a promotion, ask which piece.
+                    // Several moves to the same square means a promotion: ask which piece.
                     _ => self.pending_promotion = Some((from, square)),
                 }
             }
@@ -110,9 +102,10 @@ impl ChessApp {
         }
     }
 
-    /// The legal moves the piece on `from` can make.
+    /// The legal moves of the piece on `from`.
     fn moves_from(&self, from: Square) -> Vec<Move> {
-        rules::legal_moves(&self.position)
+        self.game
+            .legal_moves()
             .into_iter()
             .filter(|mv| mv.from == from)
             .collect()
@@ -120,46 +113,67 @@ impl ChessApp {
 
     /// What to draw on top of the board this frame.
     fn highlights(&self) -> Highlights {
-        let side = self.position.side_to_move;
+        let position = self.game.position();
+        let side = position.side_to_move;
         Highlights {
             selected: self.selected,
             targets: match self.selected {
                 Some(from) => self.moves_from(from).iter().map(|mv| mv.to).collect(),
                 None => Vec::new(),
             },
-            check: if rules::is_in_check(&self.position, side) {
-                rules::king_square(&self.position, side)
+            check: if rules::is_in_check(position, side) {
+                rules::king_square(position, side)
             } else {
                 None
             },
         }
     }
 
-    /// Plays a move, records it, and passes the turn (and the clock) and checks for the end.
+    /// Plays a move and passes the clock to the other player.
     fn play_move(&mut self, mv: Move) {
-        self.position.make_move(mv);
-        self.moves.push(mv);
         self.selected = None;
-        self.clock.start(self.position.side_to_move);
-
-        if let Some(message) = status_message(rules::status(&self.position)) {
-            self.clock.stop();
-            self.game_over = Some(message);
+        self.pending_promotion = None;
+        if let Err(error) = self.game.play(mv) {
+            eprintln!("could not play {mv}: {error}");
+            return;
         }
+
+        if self.game.result().is_some() {
+            self.clock.stop();
+        } else {
+            self.clock.start(self.game.position().side_to_move);
+        }
+    }
+
+    /// Takes back the last move. The clock keeps the time already used.
+    fn undo(&mut self) {
+        if self.game.undo().is_some() {
+            self.selected = None;
+            if self.game.history().is_empty() {
+                self.clock.stop(); // back at the start: nobody's time runs
+            } else {
+                self.clock.start(self.game.position().side_to_move);
+            }
+        }
+    }
+
+    /// The player whose turn it is gives up.
+    fn resign(&mut self) {
+        let winner = self.game.position().side_to_move.opposite();
+        self.game.end(GameResult::Resignation { winner });
+        self.clock.stop();
     }
 
     /// Ends the game if a player has run out of time.
     fn check_time(&mut self) {
-        if self.game_over.is_some() {
+        if self.game.result().is_some() {
             return;
         }
         if let Some(loser) = self.clock.flagged() {
             self.clock.stop();
-            self.game_over = Some(format!(
-                "{:?} ran out of time. {:?} wins!",
-                loser,
-                loser.opposite()
-            ));
+            self.game.end(GameResult::Timeout {
+                winner: loser.opposite(),
+            });
         }
     }
 
@@ -180,7 +194,7 @@ impl ChessApp {
         egui::CentralPanel::default().show(ui, |ui| {
             let clicked = board_view::draw_board(
                 ui,
-                &self.position.board,
+                &self.game.position().board,
                 &self.textures,
                 &highlights,
                 self.flipped,
@@ -189,17 +203,18 @@ impl ChessApp {
                 self.handle_click(square);
             }
         });
+
         if self.pending_promotion.is_some() {
             self.promotion_picker(ui);
         }
     }
 
-    /// A pop-up windows with the four pieces a pawn can become.
+    /// A pop-up window with the four pieces a pawn can become.
     fn promotion_picker(&mut self, ui: &mut egui::Ui) {
         let Some((from, to)) = self.pending_promotion else {
             return;
         };
-        let color = self.position.side_to_move;
+        let color = self.game.position().side_to_move;
         let mut chosen = None;
 
         egui::Modal::new(egui::Id::unique("promotion")).show(ui.ctx(), |ui| {
@@ -223,6 +238,7 @@ impl ChessApp {
                 self.selected = None;
             }
         });
+
         if let Some(kind) = chosen {
             self.play_move(Move {
                 from,
@@ -252,13 +268,14 @@ impl ChessApp {
         self.clock_label(ui, bottom);
         ui.separator();
 
-        match &self.game_over {
-            Some(message) => {
-                ui.colored_label(egui::Color32::RED, message);
+        match self.game.result() {
+            Some(result) => {
+                ui.colored_label(egui::Color32::RED, result.to_string());
             }
             None => {
-                let side = self.position.side_to_move;
-                if rules::is_in_check(&self.position, side) {
+                let position = self.game.position();
+                let side = position.side_to_move;
+                if rules::is_in_check(position, side) {
                     ui.colored_label(egui::Color32::ORANGE, format!("{side:?} is in check!"));
                 } else {
                     ui.label(format!("{side:?} to move"));
@@ -277,9 +294,25 @@ impl ChessApp {
                 self.back_to_menu();
             }
         });
+        let playing = self.game.result().is_none();
+        ui.horizontal(|ui| {
+            let can_undo = playing && !self.game.history().is_empty();
+            if ui
+                .add_enabled(can_undo, egui::Button::new("Undo move"))
+                .clicked()
+            {
+                self.undo();
+            }
+            if ui
+                .add_enabled(playing, egui::Button::new("Resign"))
+                .clicked()
+            {
+                self.resign();
+            }
+        });
 
         ui.separator();
-        let fen = self.position.to_fen();
+        let fen = self.game.position().to_fen();
         ui.horizontal(|ui| {
             ui.strong("FEN");
             if ui.small_button("Copy").clicked() {
@@ -291,10 +324,10 @@ impl ChessApp {
         ui.separator();
         ui.strong("Moves");
         egui::ScrollArea::vertical().show(ui, |ui| {
-            for (number, pair) in self.moves.chunks(2).enumerate() {
-                let white = pair[0].to_string();
-                let black = pair.get(1).map(Move::to_string).unwrap_or_default();
-                ui.monospace(format!("{:>3}. {white:<6} {black}", number + 1));
+            for (number, pair) in self.game.history().chunks(2).enumerate() {
+                let white = &pair[0].san;
+                let black = pair.get(1).map(|played| played.san.as_str()).unwrap_or("");
+                ui.monospace(format!("{:>3}. {white:<8} {black}", number + 1));
             }
         });
     }
@@ -305,25 +338,10 @@ impl ChessApp {
         let mut text = egui::RichText::new(format!("{color:?}  {time}"))
             .size(28.0)
             .monospace();
-        if color == self.position.side_to_move && self.game_over.is_none() {
+        if color == self.game.position().side_to_move && self.game.result().is_none() {
             text = text.strong().color(egui::Color32::LIGHT_GREEN);
         }
         ui.label(text);
-    }
-}
-
-/// The message to show when the game is over, or 'None' if it isn't.
-fn status_message(status: GameStatus) -> Option<String> {
-    match status {
-        GameStatus::Ongoing => None,
-        GameStatus::Checkmate { winner } => Some(format!("Checkmate! {winner:?} wins.")),
-        GameStatus::Stalemate => Some("Stalemate. It's a draw.".to_string()),
-        GameStatus::Draw(DrawReason::FiftyMoveRule) => {
-            Some("Draw by the 50-move rule.".to_string())
-        }
-        GameStatus::Draw(DrawReason::InsufficientMaterial) => {
-            Some("Draw: not enough pieces left to checkmate.".to_string())
-        }
     }
 }
 

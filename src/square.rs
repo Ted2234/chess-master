@@ -47,6 +47,16 @@ impl Square {
         (0..8).flat_map(|rank| (0..8).map(move |file| Square::new(rank, file)))
     }
 
+    /// The file as a letter, `'a'` to `'h'`.
+    pub fn file_char(self) -> char {
+        (b'a' + self.file as u8) as char
+    }
+
+    /// The rnal as a digit, `'1'` to `'8'`
+    pub fn rank_char(self) -> char {
+        (b'1' + self.rank as u8) as char
+    }
+
     /// Returns true for light square
     pub fn is_light(self) -> bool {
         !(self.rank + self.file).is_multiple_of(2)
@@ -56,8 +66,7 @@ impl Square {
 impl fmt::Display for Square {
     /// Shows the square in chess notation e.g 'e4'
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let file = (b'a' + self.file as u8) as char;
-        write!(f, "{file}{}", self.rank + 1)
+        write!(f, "{}{}", self.file_char(), self.rank_char())
     }
 }
 

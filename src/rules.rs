@@ -19,6 +19,8 @@ pub enum DrawReason {
     FiftyMoveRule,
     /// Neither side has enough pieces left to ever Checkmate.
     InsufficientMaterial,
+    /// The same position appears three times.
+    ThreefoldRepetition,
 }
 
 /// Every legal move for the side to move.
