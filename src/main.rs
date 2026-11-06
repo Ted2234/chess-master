@@ -3,6 +3,7 @@ mod clock;
 mod moves;
 mod piece;
 mod position;
+mod rules;
 mod square;
 mod ui;
 

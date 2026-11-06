@@ -5,7 +5,7 @@ use crate::position::Position;
 use crate::square::Square;
 
 /// A move from one square to another.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Move {
     pub from: Square,
     pub to: Square,
@@ -35,7 +35,7 @@ impl fmt::Display for Move {
 }
 
 /// The 8 jumps a knight can make as (rank, file) steps.
-const KNIGHT_JUMPS: [(isize, isize); 8] = [
+pub const KNIGHT_JUMPS: [(isize, isize); 8] = [
     (2, 1),
     (1, 2),
     (-1, 2),
@@ -47,7 +47,7 @@ const KNIGHT_JUMPS: [(isize, isize); 8] = [
 ];
 
 /// The 8 squares around a king.
-const KING_STEPS: [(isize, isize); 8] = [
+pub const KING_STEPS: [(isize, isize); 8] = [
     (1, 0),
     (1, 1),
     (0, 1),
@@ -59,10 +59,10 @@ const KING_STEPS: [(isize, isize); 8] = [
 ];
 
 /// Directions a rook can slide in: up, down, right, left.
-const ROOK_DIRECTIONS: [(isize, isize); 4] = [(1, 0), (-1, 0), (0, 1), (0, -1)];
+pub const ROOK_DIRECTIONS: [(isize, isize); 4] = [(1, 0), (-1, 0), (0, 1), (0, -1)];
 
 /// Directions a bichop slides in: the four diagonals.
-const BISHOP_DIRECTIONS: [(isize, isize); 4] = [(1, 1), (1, -1), (-1, 1), (-1, -1)];
+pub const BISHOP_DIRECTIONS: [(isize, isize); 4] = [(1, 1), (1, -1), (-1, 1), (-1, -1)];
 
 const PROMOTION_KINDS: [PieceKind; 4] = [
     PieceKind::Queen,

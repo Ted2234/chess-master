@@ -7,6 +7,18 @@ const LIGHT_SQUARE: Color32 = Color32::from_rgb(204, 255, 255);
 const DARK_SQUARE: Color32 = Color32::from_rgb(0, 102, 204);
 const SELECTED: Color32 = Color32::from_rgba_unmultiplied_const(255, 255, 0, 90);
 const MOVE_DOT: Color32 = Color32::from_rgba_unmultiplied_const(0, 0, 0, 70);
+const CHECK: Color32 = Color32::from_rgba_unmultiplied_const(255, 0, 0, 110);
+
+/// Everything that is drawn on top of the plain board.
+#[derive(Debug, Clone, Default)]
+pub struct Highlights {
+    /// The square of the piece the player picked up.
+    pub selected: Option<Square>,
+    /// Shere the selected piece can move to (dots)
+    pub targets: Vec<Square>,
+    /// The square of a king that is in check (drawn red)
+    pub check: Option<Square>,
+}
 
 /// Where the board is on the screen and how big each square is.
 struct Layout {
@@ -52,8 +64,7 @@ pub fn draw_board(
     ui: &mut egui::Ui,
     board: &Board,
     textures: &PieceTextures,
-    selected: Option<Square>,
-    targets: &[Square],
+    highlights: &Highlights,
     flipped: bool,
 ) -> Option<Square> {
     let size = ui.available_size().min_elem();
@@ -65,12 +76,15 @@ pub fn draw_board(
     };
 
     draw_squares(&painter, &layout);
-    if let Some(square) = selected {
+    if let Some(square) = highlights.check {
+        painter.rect_filled(layout.square_rect(square), 0.0, CHECK);
+    }
+    if let Some(square) = highlights.selected {
         painter.rect_filled(layout.square_rect(square), 0.0, SELECTED);
     }
     draw_label(&painter, &layout);
     draw_pieces(&painter, &layout, board, textures);
-    draw_move_dots(&painter, &layout, board, targets);
+    draw_move_dots(&painter, &layout, board, &highlights.targets);
 
     if response.clicked() {
         response

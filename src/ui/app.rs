@@ -3,11 +3,12 @@ use std::time::Duration;
 use eframe::egui;
 
 use crate::clock::{self, Clock};
-use crate::moves::{self, Move};
-use crate::piece::Color;
+use crate::moves::Move;
+use crate::piece::{Color, Piece, PieceKind};
 use crate::position::Position;
+use crate::rules::{self, DrawReason, GameStatus};
 use crate::square::Square;
-use crate::ui::board_view;
+use crate::ui::board_view::{self, Highlights};
 use crate::ui::menu::{self, GameSettings};
 use crate::ui::piece_textures::PieceTextures;
 
@@ -28,6 +29,8 @@ pub struct ChessApp {
     position: Position,
     /// The square of the piece the player picked up, if any.
     selected: Option<Square>,
+    /// A pawn move awaiting for the player to pick a promotion piece.
+    pending_promotion: Option<(Square, Square)>,
     /// Every move played so far.
     moves: Vec<Move>,
     /// When true, the board is drawn with Black at the bottom.
@@ -49,6 +52,7 @@ impl ChessApp {
             textures: PieceTextures::load(&cc.egui_ctx)?,
             position: Position::starting(),
             selected: None,
+            pending_promotion: None,
             moves: Vec::new(),
             flipped: false,
             clock: Clock::new(settings.time_control),
@@ -60,6 +64,7 @@ impl ChessApp {
     fn new_game(&mut self) {
         self.position = Position::starting();
         self.selected = None;
+        self.pending_promotion = None;
         self.moves.clear();
         self.clock = Clock::new(self.settings.time_control);
         self.game_over = None;
@@ -74,7 +79,7 @@ impl ChessApp {
 
     /// Selects a piece, or moves the selected piece, depending on what was clicked.
     fn handle_click(&mut self, square: Square) {
-        if self.game_over.is_some() {
+        if self.game_over.is_some() || self.pending_promotion.is_some() {
             return;
         }
 
@@ -88,40 +93,59 @@ impl ChessApp {
             Some(from) if from == square => self.selected = None,
             _ if clicked_own_piece => self.selected = Some(square),
             Some(from) => {
-                // Only squares the selected piece can actually move to are accepted.
-                // (For a promotion, the first move found is the queen. Lab 11 adds a picker.)
-                let chosen = self.moves_from(from).into_iter().find(|mv| mv.to == square);
-                match chosen {
-                    Some(mv) => self.play_move(mv),
-                    None => self.selected = None,
+                // Only squares the selected piece can leaglly move to are accepted.
+                let options: Vec<Move> = self
+                    .moves_from(from)
+                    .into_iter()
+                    .filter(|mv| mv.to == square)
+                    .collect();
+                match options.as_slice() {
+                    [] => self.selected = None,
+                    [mv] => self.play_move(*mv),
+                    // Several moves to the same square means a promotion, ask which piece.
+                    _ => self.pending_promotion = Some((from, square)),
                 }
             }
             None => {}
         }
     }
 
-    /// The moves the piece on `from` can make.
+    /// The legal moves the piece on `from` can make.
     fn moves_from(&self, from: Square) -> Vec<Move> {
-        moves::pseudo_legal_moves(&self.position)
+        rules::legal_moves(&self.position)
             .into_iter()
             .filter(|mv| mv.from == from)
             .collect()
     }
 
-    /// The squares to mark with a dot: where the selected piece can go.
-    fn target_squares(&self) -> Vec<Square> {
-        match self.selected {
-            Some(from) => self.moves_from(from).iter().map(|mv| mv.to).collect(),
-            None => Vec::new(),
+    /// What to draw on top of the board this frame.
+    fn highlights(&self) -> Highlights {
+        let side = self.position.side_to_move;
+        Highlights {
+            selected: self.selected,
+            targets: match self.selected {
+                Some(from) => self.moves_from(from).iter().map(|mv| mv.to).collect(),
+                None => Vec::new(),
+            },
+            check: if rules::is_in_check(&self.position, side) {
+                rules::king_square(&self.position, side)
+            } else {
+                None
+            },
         }
     }
 
-    /// Plays a move, records it, and passes the turn (and the clock) to the other player.
+    /// Plays a move, records it, and passes the turn (and the clock) and checks for the end.
     fn play_move(&mut self, mv: Move) {
-        self.position.make_move(mv.clone());
+        self.position.make_move(mv);
         self.moves.push(mv);
         self.selected = None;
         self.clock.start(self.position.side_to_move);
+
+        if let Some(message) = status_message(rules::status(&self.position)) {
+            self.clock.stop();
+            self.game_over = Some(message);
+        }
     }
 
     /// Ends the game if a player has run out of time.
@@ -139,7 +163,7 @@ impl ChessApp {
         }
     }
 
-    /// Draws the game screen: the side panel and the board.
+    /// Draws the game screen: the side panel, the board and the promotion picker.
     fn game_screen(&mut self, ui: &mut egui::Ui) {
         self.check_time();
         if self.clock.is_running() {
@@ -152,20 +176,60 @@ impl ChessApp {
             .exact_size(260.0)
             .show(ui, |ui| self.side_panel(ui));
 
-        let targets = self.target_squares();
+        let highlights = self.highlights();
         egui::CentralPanel::default().show(ui, |ui| {
             let clicked = board_view::draw_board(
                 ui,
                 &self.position.board,
                 &self.textures,
-                self.selected,
-                &targets,
+                &highlights,
                 self.flipped,
             );
             if let Some(square) = clicked {
                 self.handle_click(square);
             }
         });
+        if self.pending_promotion.is_some() {
+            self.promotion_picker(ui);
+        }
+    }
+
+    /// A pop-up windows with the four pieces a pawn can become.
+    fn promotion_picker(&mut self, ui: &mut egui::Ui) {
+        let Some((from, to)) = self.pending_promotion else {
+            return;
+        };
+        let color = self.position.side_to_move;
+        let mut chosen = None;
+
+        egui::Modal::new(egui::Id::unique("promotion")).show(ui.ctx(), |ui| {
+            ui.label("Promote to:");
+            ui.horizontal(|ui| {
+                for kind in [
+                    PieceKind::Queen,
+                    PieceKind::Rook,
+                    PieceKind::Bishop,
+                    PieceKind::Knight,
+                ] {
+                    let texture = self.textures.get(Piece::new(color, kind));
+                    let image = egui::load::SizedTexture::new(texture, egui::vec2(64.0, 64.0));
+                    if ui.add(egui::Button::image(image)).clicked() {
+                        chosen = Some(kind);
+                    }
+                }
+            });
+            if ui.button("Cancel").clicked() {
+                self.pending_promotion = None;
+                self.selected = None;
+            }
+        });
+        if let Some(kind) = chosen {
+            self.play_move(Move {
+                from,
+                to,
+                promotion: Some(kind),
+            });
+        }
     }
 
     /// Draws the panel on the right: clocks, game status, buttons and the move list.
@@ -193,7 +257,12 @@ impl ChessApp {
                 ui.colored_label(egui::Color32::RED, message);
             }
             None => {
-                ui.label(format!("{:?} to move", self.position.side_to_move));
+                let side = self.position.side_to_move;
+                if rules::is_in_check(&self.position, side) {
+                    ui.colored_label(egui::Color32::ORANGE, format!("{side:?} is in check!"));
+                } else {
+                    ui.label(format!("{side:?} to move"));
+                }
             }
         }
 
@@ -240,6 +309,21 @@ impl ChessApp {
             text = text.strong().color(egui::Color32::LIGHT_GREEN);
         }
         ui.label(text);
+    }
+}
+
+/// The message to show when the game is over, or 'None' if it isn't.
+fn status_message(status: GameStatus) -> Option<String> {
+    match status {
+        GameStatus::Ongoing => None,
+        GameStatus::Checkmate { winner } => Some(format!("Checkmate! {winner:?} wins.")),
+        GameStatus::Stalemate => Some("Stalemate. It's a draw.".to_string()),
+        GameStatus::Draw(DrawReason::FiftyMoveRule) => {
+            Some("Draw by the 50-move rule.".to_string())
+        }
+        GameStatus::Draw(DrawReason::InsufficientMaterial) => {
+            Some("Draw: not enough pieces left to checkmate.".to_string())
+        }
     }
 }
 
