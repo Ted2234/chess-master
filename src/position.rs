@@ -2,7 +2,8 @@ use std::fmt;
 use std::str::FromStr;
 
 use crate::board::Board;
-use crate::piece::{Color, Piece};
+use crate::moves::Move;
+use crate::piece::{Color, Piece, PieceKind};
 use crate::square::Square;
 
 /// The FEN of the standard starting position.
@@ -66,6 +67,77 @@ impl Position {
     /// Returns the standard starting position.
     pub fn starting() -> Self {
         START_FEN.parse().expect("START_FEN is a valid FEN")
+    }
+
+    /// Plays a move, updating the board and everything else in the position.
+    ///
+    /// `mv` must be a move generated for this position (see 'move.rs').
+    pub fn make_move(&mut self, mv: Move) {
+        let us = self.side_to_move;
+        let Some(piece) = self.board.get(mv.from) else {
+            return; //no piece to move.
+        };
+        let captured = self.board.get(mv.to);
+        let is_pawn = piece.kind == PieceKind::Pawn;
+
+        // En passasnt: the captured pawn is next to the target square, not on it.
+        if is_pawn && Some(mv.to) == self.en_passant && captured.is_none() {
+            self.board.set(Square::new(mv.from.rank, mv.to.file), None);
+        }
+
+        self.board.move_piece(mv.from, mv.to);
+
+        if let Some(kind) = mv.promotion {
+            self.board.set(mv.to, Some(Piece::new(us, kind)));
+        }
+
+        // Castliing: the king moves two squares, so the rook jumps over it.
+        if piece.kind == PieceKind::King && mv.from.file.abs_diff(mv.to.file) == 2 {
+            let (rook_from, rook_to) = if mv.to.file == 6 { (7, 5) } else { (0, 3) };
+            let rank = mv.from.rank;
+            self.board
+                .move_piece(Square::new(rank, rook_from), Square::new(rank, rook_to));
+        }
+
+        // After a double pawn push, the square it skipped can be captured en passant.
+        self.en_passant = if is_pawn && mv.from.rank.abs_diff(mv.to.rank) == 2 {
+            Some(Square::new((mv.from.rank + mv.to.rank) / 2, mv.from.file))
+        } else {
+            None
+        };
+
+        self.update_castling_rights(mv);
+
+        if is_pawn || captured.is_some() {
+            self.halfmove_clock = 0;
+        } else {
+            self.halfmove_clock += 1;
+        }
+        if us == Color::Black {
+            self.fullmove_number += 1;
+        }
+        self.side_to_move = us.opposite();
+    }
+
+    /// A move from or to a king's or rook's starting square removes those castling rights.
+    fn update_castling_rights(&mut self, mv: Move) {
+        for square in [mv.from, mv.to] {
+            match (square.rank, square.file) {
+                (0, 4) => {
+                    self.castling.white_king_side = false;
+                    self.castling.white_queen_side = false;
+                }
+                (0, 7) => self.castling.white_king_side = false,
+                (0, 0) => self.castling.white_queen_side = false,
+                (7, 4) => {
+                    self.castling.black_king_side = false;
+                    self.castling.black_queen_side = false;
+                }
+                (7, 7) => self.castling.black_king_side = false,
+                (7, 0) => self.castling.black_queen_side = false,
+                _ => {}
+            }
+        }
     }
 
     /// Writes the position as a FEN string.
@@ -244,7 +316,6 @@ fn board_to_fen(board: &Board) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::piece::PieceKind;
 
     /// A famous test position with castling, pins and en passant chances.
     const KIWIPETE: &str = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
@@ -280,6 +351,79 @@ mod tests {
         assert_eq!(position.en_passant, None);
     }
 
+    /// Plays moves given in UCI style ("e2e4", "e7e8q") and returns the FEN.
+    fn fen_after(start: &str, moves: &[&str]) -> String {
+        let mut position: Position = start.parse().unwrap();
+        for text in moves {
+            let from = Square::from_name(&text[0..2]).unwrap();
+            let to = Square::from_name(&text[2..4]).unwrap();
+            let promotion = text
+                .chars()
+                .nth(4)
+                .and_then(Piece::from_symbol)
+                .map(|piece| piece.kind);
+            position.make_move(Move {
+                from,
+                to,
+                promotion,
+            });
+        }
+        position.to_fen()
+    }
+
+    #[test]
+    fn double_push_sets_en_passant_square() {
+        assert_eq!(
+            fen_after(START_FEN, &["e2e4"]),
+            "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
+        );
+    }
+
+    #[test]
+    fn counters_update() {
+        // Knight moves don't reset the half-move clock; Black's move ends move 1.
+        assert_eq!(
+            fen_after(START_FEN, &["g1f3", "g8f6"]),
+            "rnbqkb1r/pppppppp/5n2/8/8/5N2/PPPPPPPP/RNBQKB1R w KQkq - 2 2"
+        );
+    }
+
+    #[test]
+    fn en_passant_removes_the_pawn() {
+        let start = "k7/8/8/3pP3/8/8/8/K7 w - d6 0 1";
+        assert_eq!(fen_after(start, &["e5d6"]), "k7/8/3P4/8/8/8/8/K7 b - - 0 1");
+    }
+
+    #[test]
+    fn castling_moves_the_rook() {
+        let start = "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1";
+        assert_eq!(
+            fen_after(start, &["e1g1"]),
+            "r3k2r/8/8/8/8/8/8/R4RK1 b kq - 1 1"
+        );
+        assert_eq!(
+            fen_after(start, &["e1g1", "e8c8"]),
+            "2kr3r/8/8/8/8/8/8/R4RK1 w - - 2 2"
+        );
+    }
+
+    #[test]
+    fn moving_a_rook_loses_that_castling_right() {
+        let start = "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1";
+        assert_eq!(
+            fen_after(start, &["h1h5"]),
+            "r3k2r/8/8/7R/8/8/8/R3K3 b Qkq - 1 1"
+        );
+    }
+
+    #[test]
+    fn promotion_places_the_new_piece() {
+        let start = "k7/4P3/8/8/8/8/8/K7 w - - 0 1";
+        assert_eq!(
+            fen_after(start, &["e7e8n"]),
+            "k3N3/8/8/8/8/8/8/K7 b - - 0 1"
+        );
+    }
     #[test]
     fn bad_fens_give_the_right_error() {
         let cases = [

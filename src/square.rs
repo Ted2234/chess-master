@@ -30,6 +30,18 @@ impl Square {
         Some(Square::new(rank, file))
     }
 
+    /// returns the square 'rank_delta' rnks up and 'file_delta' files to the fight, or None is that
+    /// would be off the board.
+    pub fn offset(self, rank_delta: isize, file_delta: isize) -> Option<Square> {
+        let rank = self.rank as isize + rank_delta;
+        let file = self.file as isize + file_delta;
+        if (0..8).contains(&rank) && (0..8).contains(&file) {
+            Some(Square::new(rank as usize, file as usize))
+        } else {
+            None
+        }
+    }
+
     /// All 64 squares: a1, b1, ..., h1,  a2, ..., h8.
     pub fn all() -> impl Iterator<Item = Square> {
         (0..8).flat_map(|rank| (0..8).map(move |file| Square::new(rank, file)))
@@ -66,6 +78,15 @@ mod tests {
         for name in ["", "e", "i1", "a9", "a0", "e44", "E4"] {
             assert_eq!(Square::from_name(name), None, "{name} should be invalid");
         }
+    }
+
+    #[test]
+    fn offset_stays_on_the_board() {
+        let e4 = Square::from_name("e4").unwrap();
+        assert_eq!(e4.offset(1, 1), Square::from_name("f5"));
+        assert_eq!(e4.offset(-3, -4), Square::from_name("a1"));
+        assert_eq!(e4.offset(5, 0), None);
+        assert_eq!(e4.offset(0, -5), None);
     }
 
     #[test]

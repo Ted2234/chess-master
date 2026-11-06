@@ -3,6 +3,7 @@ use std::time::Duration;
 use eframe::egui;
 
 use crate::clock::{self, Clock};
+use crate::moves::{self, Move};
 use crate::piece::Color;
 use crate::position::Position;
 use crate::square::Square;
@@ -27,8 +28,8 @@ pub struct ChessApp {
     position: Position,
     /// The square of the piece the player picked up, if any.
     selected: Option<Square>,
-    /// Every move played so far, as (from, to) pairs.
-    moves: Vec<(Square, Square)>,
+    /// Every move played so far.
+    moves: Vec<Move>,
     /// When true, the board is drawn with Black at the bottom.
     flipped: bool,
     clock: Clock,
@@ -84,19 +85,41 @@ impl ChessApp {
             .is_some_and(|piece| piece.color == self.position.side_to_move);
 
         match self.selected {
-            None if clicked_own_piece => self.selected = Some(square),
-            None => {}
             Some(from) if from == square => self.selected = None,
-            Some(_) if clicked_own_piece => self.selected = Some(square),
-            Some(from) => self.make_move(from, square),
+            _ if clicked_own_piece => self.selected = Some(square),
+            Some(from) => {
+                // Only squares the selected piece can actually move to are accepted.
+                // (For a promotion, the first move found is the queen. Lab 11 adds a picker.)
+                let chosen = self.moves_from(from).into_iter().find(|mv| mv.to == square);
+                match chosen {
+                    Some(mv) => self.play_move(mv),
+                    None => self.selected = None,
+                }
+            }
+            None => {}
         }
     }
 
-    /// Moves a piece, records it, and passes the turn (and the clock) to the other player.
-    fn make_move(&mut self, from: Square, to: Square) {
-        self.position.board.move_piece(from, to);
-        self.position.side_to_move = self.position.side_to_move.opposite();
-        self.moves.push((from, to));
+    /// The moves the piece on `from` can make.
+    fn moves_from(&self, from: Square) -> Vec<Move> {
+        moves::pseudo_legal_moves(&self.position)
+            .into_iter()
+            .filter(|mv| mv.from == from)
+            .collect()
+    }
+
+    /// The squares to mark with a dot: where the selected piece can go.
+    fn target_squares(&self) -> Vec<Square> {
+        match self.selected {
+            Some(from) => self.moves_from(from).iter().map(|mv| mv.to).collect(),
+            None => Vec::new(),
+        }
+    }
+
+    /// Plays a move, records it, and passes the turn (and the clock) to the other player.
+    fn play_move(&mut self, mv: Move) {
+        self.position.make_move(mv.clone());
+        self.moves.push(mv);
         self.selected = None;
         self.clock.start(self.position.side_to_move);
     }
@@ -129,12 +152,14 @@ impl ChessApp {
             .exact_size(260.0)
             .show(ui, |ui| self.side_panel(ui));
 
+        let targets = self.target_squares();
         egui::CentralPanel::default().show(ui, |ui| {
             let clicked = board_view::draw_board(
                 ui,
                 &self.position.board,
                 &self.textures,
                 self.selected,
+                &targets,
                 self.flipped,
             );
             if let Some(square) = clicked {
@@ -198,11 +223,8 @@ impl ChessApp {
         ui.strong("Moves");
         egui::ScrollArea::vertical().show(ui, |ui| {
             for (number, pair) in self.moves.chunks(2).enumerate() {
-                let white = format!("{}-{}", pair[0].0, pair[0].1);
-                let black = pair
-                    .get(1)
-                    .map(|(from, to)| format!("{from}-{to}"))
-                    .unwrap_or_default();
+                let white = pair[0].to_string();
+                let black = pair.get(1).map(Move::to_string).unwrap_or_default();
                 ui.monospace(format!("{:>3}. {white:<6} {black}", number + 1));
             }
         });

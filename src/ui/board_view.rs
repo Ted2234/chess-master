@@ -1,11 +1,12 @@
 use crate::board::Board;
 use crate::square::Square;
 use crate::ui::piece_textures::PieceTextures;
-use eframe::egui::{self, Align2, Color32, FontId, Painter, Pos2, Rect, Sense, Vec2};
+use eframe::egui::{self, Align2, Color32, FontId, Painter, Pos2, Rect, Sense, Stroke, Vec2};
 
 const LIGHT_SQUARE: Color32 = Color32::from_rgb(204, 255, 255);
 const DARK_SQUARE: Color32 = Color32::from_rgb(0, 102, 204);
 const SELECTED: Color32 = Color32::from_rgba_unmultiplied_const(255, 255, 0, 90);
+const MOVE_DOT: Color32 = Color32::from_rgba_unmultiplied_const(0, 0, 0, 70);
 
 /// Where the board is on the screen and how big each square is.
 struct Layout {
@@ -52,6 +53,7 @@ pub fn draw_board(
     board: &Board,
     textures: &PieceTextures,
     selected: Option<Square>,
+    targets: &[Square],
     flipped: bool,
 ) -> Option<Square> {
     let size = ui.available_size().min_elem();
@@ -68,6 +70,7 @@ pub fn draw_board(
     }
     draw_label(&painter, &layout);
     draw_pieces(&painter, &layout, board, textures);
+    draw_move_dots(&painter, &layout, board, targets);
 
     if response.clicked() {
         response
@@ -80,7 +83,7 @@ pub fn draw_board(
 
 /// Paints the 64 light and dark squares.
 fn draw_squares(painter: &Painter, layout: &Layout) {
-    for rank in 0..8 {
+    for _rank in 0..8 {
         for square in Square::all() {
             painter.rect_filled(layout.square_rect(square), 0.0, square_color(square));
         }
@@ -125,6 +128,20 @@ fn draw_pieces(painter: &Painter, layout: &Layout, board: &Board, textures: &Pie
         if let Some(piece) = board.get(square) {
             let rect = layout.square_rect(square);
             painter.image(textures.get(piece), rect, whole_image, Color32::WHITE);
+        }
+    }
+}
+
+/// Marks the squares the selected piece can move to: a dot on empty squares, a ring around enemey
+/// pieces that can be captured
+fn draw_move_dots(painter: &Painter, layout: &Layout, board: &Board, targets: &[Square]) {
+    for &square in targets {
+        let center = layout.square_rect(square).center();
+        if board.get(square).is_some() {
+            let stroke = Stroke::new(layout.square_size * 0.08, MOVE_DOT);
+            painter.circle_stroke(center, layout.square_size * 0.04, stroke);
+        } else {
+            painter.circle_filled(center, layout.square_size * 0.15, MOVE_DOT);
         }
     }
 }
