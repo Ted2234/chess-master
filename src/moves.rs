@@ -23,6 +23,24 @@ impl Move {
     }
 }
 
+impl Move {
+    /// reads a move in UCI style (`e2e4`, `e7e8q`), the format Stockfish uses.
+    pub fn from_uci(text: &str) -> Option<Move> {
+        let from = Square::from_name(text.get(0..2)?)?;
+        let to = Square::from_name(text.get(2..4)?)?;
+        let promotion = match text.len() {
+            4 => None,
+            5 => Some(Piece::from_symbol(text.chars().nth(4)?)?.kind),
+            _ => return None,
+        };
+        Some(Move {
+            from,
+            to,
+            promotion,
+        })
+    }
+}
+
 impl fmt::Display for Move {
     /// Writes the move in UCI style: `e2e4` or `e7e8q` for a promotion.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -249,6 +267,16 @@ mod tests {
             .collect();
         moves.sort();
         moves
+    }
+
+    #[test]
+    fn uci_round_trips() {
+        for text in ["e2e4", "g8f7", "e7e8q", "a2a1n"] {
+            assert_eq!(Move::from_uci(text).unwrap().to_string(), text);
+        }
+        for bad in ["", "e2", "e2e9", "e7e8x", "e2e4e5"] {
+            assert_eq!(Move::from_uci(bad), None, "{bad} should be invalid");
+        }
     }
 
     #[test]

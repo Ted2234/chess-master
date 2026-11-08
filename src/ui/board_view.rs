@@ -8,6 +8,7 @@ const DARK_SQUARE: Color32 = Color32::from_rgb(0, 102, 204);
 const SELECTED: Color32 = Color32::from_rgba_unmultiplied_const(255, 255, 0, 90);
 const MOVE_DOT: Color32 = Color32::from_rgba_unmultiplied_const(0, 0, 0, 70);
 const CHECK: Color32 = Color32::from_rgba_unmultiplied_const(255, 0, 0, 110);
+const ARROW: Color32 = Color32::from_rgba_unmultiplied_const(0, 120, 255, 170);
 
 /// Everything that is drawn on top of the plain board.
 #[derive(Debug, Clone, Default)]
@@ -18,6 +19,8 @@ pub struct Highlights {
     pub targets: Vec<Square>,
     /// The square of a king that is in check (drawn red)
     pub check: Option<Square>,
+    /// An arrow from one square to another, e.g. suggested move.
+    pub arrow: Option<(Square, Square)>,
 }
 
 /// Where the board is on the screen and how big each square is.
@@ -85,6 +88,9 @@ pub fn draw_board(
     draw_label(&painter, &layout);
     draw_pieces(&painter, &layout, board, textures);
     draw_move_dots(&painter, &layout, board, &highlights.targets);
+    if let Some((from, to)) = highlights.arrow {
+        draw_arrow(&painter, &layout, from, to);
+    }
 
     if response.clicked() {
         response
@@ -158,6 +164,14 @@ fn draw_move_dots(painter: &Painter, layout: &Layout, board: &Board, targets: &[
             painter.circle_filled(center, layout.square_size * 0.15, MOVE_DOT);
         }
     }
+}
+
+/// Draw an arrow from the center of one square to the center of another.
+fn draw_arrow(painter: &Painter, layout: &Layout, from: Square, to: Square) {
+    let start = layout.square_rect(from).center();
+    let end = layout.square_rect(to).center();
+    let stroke = Stroke::new(layout.square_size * 0.12, ARROW);
+    painter.arrow(start, end - start, stroke);
 }
 
 /// The color of a squae on the bord.

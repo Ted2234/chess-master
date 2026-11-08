@@ -1,5 +1,6 @@
 mod board;
 mod clock;
+mod engine;
 mod game;
 mod moves;
 mod piece;

@@ -3,10 +3,12 @@ use std::time::Duration;
 use eframe::egui;
 
 use crate::clock::{self, Clock};
+use crate::engine::{self, EngineHandle, EngineReply, EngineRequest, SearchLimit};
 use crate::game::{Game, GameResult};
 use crate::moves::Move;
 use crate::piece::{Color, Piece, PieceKind};
 use crate::rules;
+use crate::san;
 use crate::square::Square;
 use crate::ui::board_view::{self, Highlights};
 use crate::ui::menu::{self, GameSettings};
@@ -34,6 +36,16 @@ pub struct ChessApp {
     /// When true, the board is drawn with Black at the bottom.
     flipped: bool,
     clock: Clock,
+    /// Stockfish, started the first time it's unimplemented!
+    engine: Option<EngineHandle>,
+    /// The last problem with the engine. Shown in the side panel.
+    engine_error: Option<String>,
+    /// The id of the engine request we're waiting for, if any.
+    waiting_for: Option<u64>,
+    /// The id the next engine request will get.
+    next_request_id: u64,
+    /// The move Stockfish suggested for the current position.
+    hint: Option<Move>,
 }
 
 impl ChessApp {
@@ -51,6 +63,11 @@ impl ChessApp {
             pending_promotion: None,
             flipped: false,
             clock: Clock::new(settings.time_control),
+            engine: None,
+            engine_error: None,
+            waiting_for: None,
+            next_request_id: 0,
+            hint: None,
         })
     }
 
@@ -60,6 +77,11 @@ impl ChessApp {
         self.selected = None;
         self.pending_promotion = None;
         self.clock = Clock::new(self.settings.time_control);
+        self.hint = None;
+        self.waiting_for = None;
+        if let Some(engine) = &self.engine {
+            engine.send(EngineRequest::NewGame);
+        }
         self.screen = Screen::Game;
     }
 
@@ -126,6 +148,7 @@ impl ChessApp {
             } else {
                 None
             },
+            arrow: self.hint.map(|mv| (mv.from, mv.to)),
         }
     }
 
@@ -149,10 +172,65 @@ impl ChessApp {
     fn undo(&mut self) {
         if self.game.undo().is_some() {
             self.selected = None;
+            self.hint = None;
+            self.waiting_for = None;
             if self.game.history().is_empty() {
                 self.clock.stop(); // back at the start: nobody's time runs
             } else {
                 self.clock.start(self.game.position().side_to_move);
+            }
+        }
+    }
+
+    /// Starts Stockfish if it isn't running yet. Retuens false if that failed.
+    fn ensure_engine(&mut self) -> bool {
+        if self.engine.is_none() {
+            match EngineHandle::spawn() {
+                Ok(engine) => self.engine = Some(engine),
+                Err(error) => {
+                    self.engine_error = Some(error.to_string());
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
+    /// Asks Stockfish for the best move in he current position.
+    fn request_hint(&mut self) {
+        if !self.ensure_engine() {
+            return;
+        }
+        let id = self.next_request_id;
+        self.next_request_id += 1;
+        self.waiting_for = Some(id);
+        self.hint = None;
+
+        if let Some(engine) = &self.engine {
+            engine.send(EngineRequest::Search {
+                id,
+                fen: self.game.position().to_fen(),
+                limit: SearchLimit::Millis(500),
+            });
+        }
+    }
+
+    /// Picks up any answers from the engine thread. called every frame; never waits.
+    fn pool_engine(&mut self) {
+        let Some(engine) = &self.engine else {
+            return;
+        };
+        while let Some(reply) = engine.try_receive() {
+            match reply {
+                EngineReply::Searched { id, analysis } if Some(id) == self.waiting_for => {
+                    self.waiting_for = None;
+                    self.hint = Move::from_uci(&analysis.best_move);
+                }
+                EngineReply::Searched { .. } => {} // an old answer: the position has changed
+                EngineReply::Failed(error) => {
+                    self.waiting_for = None;
+                    self.engine_error = Some(error);
+                }
             }
         }
     }
@@ -180,7 +258,8 @@ impl ChessApp {
     /// Draws the game screen: the side panel, the board and the promotion picker.
     fn game_screen(&mut self, ui: &mut egui::Ui) {
         self.check_time();
-        if self.clock.is_running() {
+        self.pool_engine();
+        if self.clock.is_running() || self.waiting_for.is_some() {
             // Redraw regularly so the clock visibly counts down.
             ui.ctx().request_repaint_after(Duration::from_millis(100));
         }
@@ -312,6 +391,24 @@ impl ChessApp {
         });
 
         ui.separator();
+        let thinking = self.waiting_for.is_some();
+        let hint_button = egui::Button::new("Hint (ask Stockfish)");
+        if ui.add_enabled(playing && !thinking, hint_button).clicked() {
+            self.request_hint();
+        }
+        if thinking {
+            ui.label("Stockfisg is thinking...");
+        }
+        if let Some(hint) = self.hint {
+            let text = san::san(self.game.position(), hint);
+            ui.label(format!("Stockfish suggests {text}"));
+        }
+        if let Some(error) = &self.engine_error {
+            ui.colored_label(egui::Color32::RED, error);
+        }
+
+        ui.separator();
+
         let fen = self.game.position().to_fen();
         ui.horizontal(|ui| {
             ui.strong("FEN");
