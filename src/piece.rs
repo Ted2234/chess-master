@@ -32,6 +32,17 @@ pub enum PieceKind {
 }
 
 impl PieceKind {
+    /// The name in lowercase, for senrences: "knight", "queen", ...
+    pub fn name(self) -> &'static str {
+        match self {
+            PieceKind::Pawn => "pawn",
+            PieceKind::Knight => "knight",
+            PieceKind::Bishop => "bishop",
+            PieceKind::Rook => "rook",
+            PieceKind::Queen => "queen",
+            PieceKind::King => "king",
+        }
+    }
     ///All six kind of pieces.
     pub const ALL: [PieceKind; 6] = [
         PieceKind::Pawn,

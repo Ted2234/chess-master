@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use eframe::egui;
+use eframe::egui::{self, RichText};
 
 use crate::bot;
 use crate::clock::{self, Clock};
@@ -11,15 +11,17 @@ use crate::piece::{Color, Piece, PieceKind};
 use crate::rules;
 use crate::san;
 use crate::square::Square;
-use crate::ui::board_view::{self, Highlights};
+use crate::ui::board_view::{self, HINT_ARROW, Highlights};
 use crate::ui::menu::{self, GameMode, GameSettings};
 use crate::ui::piece_textures::PieceTextures;
+use crate::ui::review::Review;
 
 /// Which screen the app is showing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Screen {
     Menu,
     Game,
+    Review,
 }
 
 /// What we asked the engine to do, so we know what to do with its answer.
@@ -56,6 +58,8 @@ pub struct ChessApp {
     next_request_id: u64,
     /// The move Stockfish suggested for the current position.
     hint: Option<Move>,
+    /// The analysis of a finished game, show on the review screen.
+    review: Option<Review>,
 }
 
 impl ChessApp {
@@ -78,6 +82,7 @@ impl ChessApp {
             waiting_for: None,
             next_request_id: 0,
             hint: None,
+            review: None,
         })
     }
 
@@ -189,7 +194,10 @@ impl ChessApp {
             } else {
                 None
             },
-            arrow: self.hint.map(|mv| (mv.from, mv.to)),
+            arrows: self
+                .hint
+                .map(|mv| vec![(mv.from, mv.to, HINT_ARROW)])
+                .unwrap_or_default(),
         }
     }
 
@@ -286,7 +294,7 @@ impl ChessApp {
     }
 
     /// Picks up any answers from the engine thread. called every frame; never waits.
-    fn pool_engine(&mut self) {
+    fn poll_engine(&mut self) {
         // Collect the replies first: we can't call `&mut self` methods while `self.engine` is
         // borrowed.
         let replies: Vec<EngineReply> = match &self.engine {
@@ -302,6 +310,13 @@ impl ChessApp {
     fn handle_reply(&mut self, reply: EngineReply) {
         match reply {
             EngineReply::Searched { id, analysis } => {
+                // Analysis for the review screen?
+                if let Some(review) = &mut self.review
+                    && review.accepts(id)
+                {
+                    review.store(id, analysis);
+                    return;
+                }
                 let Some((waiting_id, job)) = self.waiting_for else {
                     return;
                 };
@@ -323,6 +338,91 @@ impl ChessApp {
                 self.waiting_for = None;
                 self.engine_error = Some(error);
             }
+        }
+    }
+
+    /// Sends every position of the finished game to Stockfish and opens the review screen.
+    fn start_review(&mut self) {
+        if !self.ensure_engine() {
+            return;
+        }
+        let review = Review::new(
+            self.game.history().to_vec(),
+            self.game.position().clone(),
+            self.next_request_id,
+        );
+        let fens = review.fens();
+        self.next_request_id += fens.len() as u64;
+
+        if let Some(engine) = &self.engine {
+            // Analyse at full strength, even if the bot was playing weaker.
+            engine.send(EngineRequest::SetOptions(bot::full_strength_options()));
+            for (index, fen) in fens.into_iter().enumerate() {
+                engine.send(EngineRequest::Search {
+                    id: review.first_id() + index as u64,
+                    fen,
+                    limit: SearchLimit::Depth(12),
+                });
+            }
+        }
+        self.review = Some(review);
+        self.screen = Screen::Review;
+    }
+
+    /// Draws the review screen: the analysis panel and the board at the chosen move.
+    fn review_screen(&mut self, ui: &mut egui::Ui) {
+        self.poll_engine();
+        let player = match self.settings.mode {
+            GameMode::Local => None,
+            GameMode::VsBot => Some(self.settings.player_color),
+        };
+        let Some(review) = &mut self.review else {
+            self.screen = Screen::Menu;
+            return;
+        };
+        if !review.is_finished() {
+            ui.ctx().request_repaint_after(Duration::from_millis(100));
+        }
+
+        let mut back_to_menu = false;
+        egui::Panel::right("review_panel")
+            .resizable(false)
+            .exact_size(340.0)
+            .show(ui, |ui| back_to_menu = review.side_panel(ui, player));
+
+        let position = review.position();
+        let highlights = Highlights {
+            arrows: review.arrows(),
+            check: if rules::is_in_check(position, position.side_to_move) {
+                rules::king_square(position, position.side_to_move)
+            } else {
+                None
+            },
+            ..Highlights::default()
+        };
+        egui::CentralPanel::default().show(ui, |ui| {
+            // The review board only shows positions, so clicks are ignored.
+            board_view::draw_board(
+                ui,
+                &position.board,
+                &self.textures,
+                &highlights,
+                self.flipped,
+            );
+        });
+
+        if back_to_menu {
+            if self
+                .review
+                .as_ref()
+                .is_some_and(|review| !review.is_finished())
+            {
+                // Stockfish still has analysis jobs queued. Dropping the handle makes
+                // its thread stop after the current one; a fresh engine starts when needed.
+                self.engine = None;
+            }
+            self.review = None;
+            self.screen = Screen::Menu;
         }
     }
 
@@ -354,7 +454,7 @@ impl ChessApp {
     /// Draws the game screen: the side panel, the board and the promotion picker.
     fn game_screen(&mut self, ui: &mut egui::Ui) {
         self.check_time();
-        self.pool_engine();
+        self.poll_engine();
         self.start_bot_move();
         if self.clock.is_running() || self.waiting_for.is_some() {
             // Redraw regularly so the clock visibly counts down.
@@ -467,6 +567,13 @@ impl ChessApp {
             }
         });
         let playing = self.game.result().is_none();
+        if !playing {
+            let has_moves = !self.game.history().is_empty();
+            let review_button = egui::Button::new(RichText::new("Review game").size(18.0));
+            if ui.add_enabled(has_moves, review_button).clicked() {
+                self.start_review();
+            }
+        }
         ui.horizontal(|ui| {
             let can_undo = playing && !self.game.history().is_empty() && !self.is_bot_turn();
             if ui
@@ -563,6 +670,7 @@ impl eframe::App for ChessApp {
                 });
             }
             Screen::Game => self.game_screen(ui),
+            Screen::Review => self.review_screen(ui),
         }
     }
 }
