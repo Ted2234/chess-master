@@ -2,8 +2,9 @@ use std::time::Duration;
 
 use eframe::egui;
 
+use crate::bot;
 use crate::clock::{self, Clock};
-use crate::engine::{self, EngineHandle, EngineReply, EngineRequest, SearchLimit};
+use crate::engine::{EngineHandle, EngineReply, EngineRequest, SearchLimit};
 use crate::game::{Game, GameResult};
 use crate::moves::Move;
 use crate::piece::{Color, Piece, PieceKind};
@@ -11,7 +12,7 @@ use crate::rules;
 use crate::san;
 use crate::square::Square;
 use crate::ui::board_view::{self, Highlights};
-use crate::ui::menu::{self, GameSettings};
+use crate::ui::menu::{self, GameMode, GameSettings};
 use crate::ui::piece_textures::PieceTextures;
 
 /// Which screen the app is showing.
@@ -19,6 +20,15 @@ use crate::ui::piece_textures::PieceTextures;
 enum Screen {
     Menu,
     Game,
+}
+
+/// What we asked the engine to do, so we know what to do with its answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EngineJob {
+    /// Suggest a move to the player.
+    Hint,
+    /// Chose the bot's next move.
+    BestMove,
 }
 
 /// The whole application: everything the window needs to remember.
@@ -40,8 +50,8 @@ pub struct ChessApp {
     engine: Option<EngineHandle>,
     /// The last problem with the engine. Shown in the side panel.
     engine_error: Option<String>,
-    /// The id of the engine request we're waiting for, if any.
-    waiting_for: Option<u64>,
+    /// The engine request we're waiting for (its id and what it's for), if any.
+    waiting_for: Option<(u64, EngineJob)>,
     /// The id the next engine request will get.
     next_request_id: u64,
     /// The move Stockfish suggested for the current position.
@@ -73,16 +83,47 @@ impl ChessApp {
 
     /// Starts a new game with the settings from the menu.
     fn new_game(&mut self) {
+        let vs_bot = self.settings.mode == GameMode::VsBot;
+        if vs_bot && !self.ensure_engine() {
+            self.screen = Screen::Menu; // can't play the bot without Stockfish.
+            return;
+        }
+
         self.game = Game::new();
         self.selected = None;
         self.pending_promotion = None;
         self.clock = Clock::new(self.settings.time_control);
         self.hint = None;
         self.waiting_for = None;
+        // Playing Black against the bot will flip the board so Black is at the bottom.
+        self.flipped = vs_bot && self.settings.player_color == Color::Black;
+
         if let Some(engine) = &self.engine {
+            let options = if vs_bot {
+                bot::strength(self.settings.bot_rating).options
+            } else {
+                bot::full_strength_options()
+            };
             engine.send(EngineRequest::NewGame);
+            engine.send(EngineRequest::SetOptions(options));
         }
         self.screen = Screen::Game;
+    }
+
+    /// True when the bot should move now.
+    fn is_bot_turn(&self) -> bool {
+        self.settings.mode == GameMode::VsBot
+            && self.game.result().is_none()
+            && self.game.position().side_to_move != self.settings.player_color
+    }
+
+    /// The name shown next to a clock: "White", or "You (White)" / "Bot (Black)"
+    fn player_name(&self, color: Color) -> String {
+        match self.settings.mode {
+            GameMode::Local => format!("{color:?}"),
+            GameMode::VsBot if color == self.settings.player_color => "You".to_string(),
+            GameMode::VsBot => "Bot".to_string(),
+        }
     }
 
     /// Leaves the game and goes back to the main menu.
@@ -93,7 +134,7 @@ impl ChessApp {
 
     /// Selects a piece, or moves the selected piece, depending on what was clicked.
     fn handle_click(&mut self, square: Square) {
-        if self.game.result().is_some() || self.pending_promotion.is_some() {
+        if self.game.result().is_some() || self.pending_promotion.is_some() || self.is_bot_turn() {
             return;
         }
 
@@ -168,9 +209,19 @@ impl ChessApp {
         }
     }
 
-    /// Takes back the last move. The clock keeps the time already used.
+    /// Takes back the last move (againts the bot: the bot's reply and your move.)
+    /// The clock keeps the time already used.
     fn undo(&mut self) {
-        if self.game.undo().is_some() {
+        let moves_to_undo = match self.settings.mode {
+            GameMode::Local => 1,
+            GameMode::VsBot => 2,
+        };
+        let mut undone = false;
+        for _ in 0..moves_to_undo {
+            undone |= self.game.undo().is_some();
+        }
+
+        if undone {
             self.selected = None;
             self.hint = None;
             self.waiting_for = None;
@@ -201,44 +252,89 @@ impl ChessApp {
         if !self.ensure_engine() {
             return;
         }
+        self.hint = None;
+        self.search(EngineJob::Hint, SearchLimit::Millis(500));
+    }
+
+    /// If it's the bot's turn it isn't thinking yet, asks it for a move.
+    fn start_bot_move(&mut self) {
+        if !self.is_bot_turn() || self.waiting_for.is_some() {
+            return;
+        }
+        let mut limit = bot::strength(self.settings.bot_rating).limit;
+        // Low on time, then tink faster.
+        let bot_color = self.settings.player_color.opposite();
+        if self.clock.remaining(bot_color) < Duration::from_secs(20) {
+            limit = SearchLimit::Millis(100);
+        }
+        self.search(EngineJob::BestMove, limit);
+    }
+
+    /// Sends a search for the current position to the engine thread.
+    fn search(&mut self, job: EngineJob, limit: SearchLimit) {
         let id = self.next_request_id;
         self.next_request_id += 1;
-        self.waiting_for = Some(id);
-        self.hint = None;
+        self.waiting_for = Some((id, job));
 
         if let Some(engine) = &self.engine {
             engine.send(EngineRequest::Search {
                 id,
                 fen: self.game.position().to_fen(),
-                limit: SearchLimit::Millis(500),
+                limit,
             });
         }
     }
 
     /// Picks up any answers from the engine thread. called every frame; never waits.
     fn pool_engine(&mut self) {
-        let Some(engine) = &self.engine else {
-            return;
+        // Collect the replies first: we can't call `&mut self` methods while `self.engine` is
+        // borrowed.
+        let replies: Vec<EngineReply> = match &self.engine {
+            Some(engine) => std::iter::from_fn(|| engine.try_receive()).collect(),
+            None => return,
         };
-        while let Some(reply) = engine.try_receive() {
-            match reply {
-                EngineReply::Searched { id, analysis } if Some(id) == self.waiting_for => {
-                    self.waiting_for = None;
-                    self.hint = Move::from_uci(&analysis.best_move);
+        for reply in replies {
+            self.handle_reply(reply);
+        }
+    }
+
+    /// Uses one answer from the engine.
+    fn handle_reply(&mut self, reply: EngineReply) {
+        match reply {
+            EngineReply::Searched { id, analysis } => {
+                let Some((waiting_id, job)) = self.waiting_for else {
+                    return;
+                };
+                if id != waiting_id {
+                    return; // an lod answer: The position has changed since.
                 }
-                EngineReply::Searched { .. } => {} // an old answer: the position has changed
-                EngineReply::Failed(error) => {
-                    self.waiting_for = None;
-                    self.engine_error = Some(error);
+                self.waiting_for = None;
+                let best_move = Move::from_uci(&analysis.best_move);
+                match job {
+                    EngineJob::Hint => self.hint = best_move,
+                    EngineJob::BestMove => {
+                        if let Some(mv) = best_move {
+                            self.play_move(mv);
+                        }
+                    }
                 }
+            }
+            EngineReply::Failed(error) => {
+                self.waiting_for = None;
+                self.engine_error = Some(error);
             }
         }
     }
 
-    /// The player whose turn it is gives up.
+    /// Gives up the game: against the bot that's you, otherwise the side to move.
     fn resign(&mut self) {
-        let winner = self.game.position().side_to_move.opposite();
-        self.game.end(GameResult::Resignation { winner });
+        let loser = match self.settings.mode {
+            GameMode::Local => self.game.position().side_to_move,
+            GameMode::VsBot => self.settings.player_color,
+        };
+        self.game.end(GameResult::Resignation {
+            winner: loser.opposite(),
+        });
         self.clock.stop();
     }
 
@@ -259,6 +355,7 @@ impl ChessApp {
     fn game_screen(&mut self, ui: &mut egui::Ui) {
         self.check_time();
         self.pool_engine();
+        self.start_bot_move();
         if self.clock.is_running() || self.waiting_for.is_some() {
             // Redraw regularly so the clock visibly counts down.
             ui.ctx().request_repaint_after(Duration::from_millis(100));
@@ -330,11 +427,7 @@ impl ChessApp {
     /// Draws the panel on the right: clocks, game status, buttons and the move list.
     fn side_panel(&mut self, ui: &mut egui::Ui) {
         ui.heading("chess-master");
-        ui.label(format!(
-            "{} · {}",
-            self.settings.mode.label(),
-            self.settings.time_control.label()
-        ));
+        ui.label(self.settings.summary());
         ui.separator();
 
         // The clock of the player at the top of the board is shown first.
@@ -375,7 +468,7 @@ impl ChessApp {
         });
         let playing = self.game.result().is_none();
         ui.horizontal(|ui| {
-            let can_undo = playing && !self.game.history().is_empty();
+            let can_undo = playing && !self.game.history().is_empty() && !self.is_bot_turn();
             if ui
                 .add_enabled(can_undo, egui::Button::new("Undo move"))
                 .clicked()
@@ -392,16 +485,25 @@ impl ChessApp {
 
         ui.separator();
         let thinking = self.waiting_for.is_some();
-        let hint_button = egui::Button::new("Hint (ask Stockfish)");
-        if ui.add_enabled(playing && !thinking, hint_button).clicked() {
-            self.request_hint();
-        }
-        if thinking {
-            ui.label("Stockfisg is thinking...");
-        }
-        if let Some(hint) = self.hint {
-            let text = san::san(self.game.position(), hint);
-            ui.label(format!("Stockfish suggests {text}"));
+        match self.settings.mode {
+            GameMode::Local => {
+                let hint_button = egui::Button::new("Hint (ask Stockfish)");
+                if ui.add_enabled(playing && !thinking, hint_button).clicked() {
+                    self.request_hint();
+                }
+                if thinking {
+                    ui.label("Stockfish is thinking...");
+                }
+                if let Some(hint) = self.hint {
+                    let text = san::san(self.game.position(), hint);
+                    ui.label(format!("Stockfish suggests {text}"));
+                }
+            }
+            GameMode::VsBot => {
+                if self.is_bot_turn() {
+                    ui.label("The bot is thinking...");
+                }
+            }
         }
         if let Some(error) = &self.engine_error {
             ui.colored_label(egui::Color32::RED, error);
@@ -432,7 +534,8 @@ impl ChessApp {
     /// Shows one player's clock. The clock of the side to move is highlighted.
     fn clock_label(&self, ui: &mut egui::Ui, color: Color) {
         let time = clock::format_time(self.clock.remaining(color));
-        let mut text = egui::RichText::new(format!("{color:?}  {time}"))
+        let name = self.player_name(color);
+        let mut text = egui::RichText::new(format!("{name:<6}{time}"))
             .size(28.0)
             .monospace();
         if color == self.game.position().side_to_move && self.game.result().is_none() {
@@ -449,7 +552,13 @@ impl eframe::App for ChessApp {
             Screen::Menu => {
                 egui::CentralPanel::default().show(ui, |ui| {
                     if menu::draw_menu(ui, &mut self.settings) {
+                        self.engine_error = None;
                         self.new_game();
+                    }
+                    if let Some(error) = &self.engine_error {
+                        ui.vertical_centered(|ui| {
+                            ui.colored_label(egui::Color32::RED, error);
+                        });
                     }
                 });
             }

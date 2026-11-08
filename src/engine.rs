@@ -3,6 +3,10 @@ use std::io::{self, BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
+use std::time::{Duration, Instant};
+
+/// Searches never answer faster than this, so the bot doesn't move instantly.
+const MIN_SEARCH_TIME: Duration = Duration::from_millis(800);
 
 /// How good a position is, from the point of view of the side to move.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,6 +30,8 @@ pub struct Analysis {
 pub enum SearchLimit {
     /// Think for this many milliseconds.
     Millis(u64),
+    /// Look this many moves deep.
+    Depth(u32),
 }
 
 impl SearchLimit {
@@ -33,6 +39,7 @@ impl SearchLimit {
     fn go_command(self) -> String {
         match self {
             SearchLimit::Millis(ms) => format!("go movetime {ms}"),
+            SearchLimit::Depth(depth) => format!("go depth {depth}"),
         }
     }
 }
@@ -96,6 +103,12 @@ impl Engine {
         engine.wait_for("uciok")?;
         engine.wait_until_ready()?;
         Ok(engine)
+    }
+
+    /// Changes an engine settings e.g. `set_option("Skill level", "5")`.
+    pub fn set_option(&mut self, name: &str, value: &str) -> Result<(), EngineError> {
+        self.send(&format!("setoption name {name} value {value}"))?;
+        self.wait_until_ready()
     }
 
     /// Tells the engine a new game starts, so it forgets the old one.
@@ -186,6 +199,8 @@ fn parse_best_move(line: &str) -> Option<String> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EngineRequest {
     NewGame,
+    /// Engine settings as (name, value) pairs.
+    SetOptions(Vec<(String, String)>),
     /// Find the best move. `id` comes back with the answer so you know which request it was.
     Search {
         id: u64,
@@ -250,9 +265,16 @@ impl EngineHandle {
 fn run_request(engine: &mut Engine, request: EngineRequest) -> Option<EngineReply> {
     let outcome = match request {
         EngineRequest::NewGame => engine.new_game().map(|()| None),
-        EngineRequest::Search { id, fen, limit } => engine
-            .search(&fen, limit)
-            .map(|analysis| Some(EngineReply::Searched { id, analysis })),
+        EngineRequest::SetOptions(options) => options
+            .iter()
+            .try_for_each(|(name, value)| engine.set_option(name, value))
+            .map(|()| None),
+        EngineRequest::Search { id, fen, limit } => {
+            let started = Instant::now();
+            let result = engine.search(&fen, limit);
+            thread::sleep(MIN_SEARCH_TIME.saturating_sub(started.elapsed()));
+            result.map(|analysis| Some(EngineReply::Searched { id, analysis }))
+        }
     };
     outcome.unwrap_or_else(|error| Some(EngineReply::Failed(error.to_string())))
 }
@@ -285,6 +307,7 @@ mod tests {
     #[test]
     fn go_commands() {
         assert_eq!(SearchLimit::Millis(500).go_command(), "go movetime 500");
+        assert_eq!(SearchLimit::Depth(12).go_command(), "go depth 12");
     }
 
     /// Needs Stockfish installed. Run with: cargo test -- --ignored
@@ -292,15 +315,12 @@ mod tests {
     #[ignore]
     fn real_engine_finds_a_move() {
         let mut engine = Engine::start().unwrap();
-        let analysis = engine.search(START_FEN, SearchLimit::Millis(200)).unwrap();
+        let analysis = engine.search(START_FEN, SearchLimit::Depth(8)).unwrap();
         assert_eq!(analysis.best_move.len(), 4);
 
         // Mate in one: Ra8#.
         let analysis = engine
-            .search(
-                "6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1",
-                SearchLimit::Millis(200),
-            )
+            .search("6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1", SearchLimit::Depth(5))
             .unwrap();
         assert_eq!(analysis.best_move, "a1a8");
         assert_eq!(analysis.score, Score::Mate(1));
