@@ -129,7 +129,9 @@ impl Review {
                 ui.horizontal(|ui| {
                     ui.heading(RichText::new("Game review").size(24.0).strong());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        back = ui.button("Main menu").clicked();
+                        // The same height as the other buttons, but only as wide as its text.
+                        let button = egui::Button::new("Main menu").min_size(Vec2::new(0.0, 34.0));
+                        back = ui.add(button).clicked();
                     });
                 });
                 ui.add_space(4.0);

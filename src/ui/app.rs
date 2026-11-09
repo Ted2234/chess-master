@@ -644,18 +644,17 @@ impl ChessApp {
                 if has_moves && widgets::accent_button(ui, "Review game") {
                     action = Some(GameOverAction::Review);
                 }
-                ui.columns(2, |columns| {
+                ui.columns(3, |columns| {
                     if widgets::wide_button(&mut columns[0], true, "New game") {
                         action = Some(GameOverAction::NewGame);
                     }
                     if widgets::wide_button(&mut columns[1], true, "Main menu") {
                         action = Some(GameOverAction::MainMenu);
                     }
+                    if widgets::wide_button(&mut columns[2], true, "Close") {
+                        action = Some(GameOverAction::Close);
+                    }
                 });
-                ui.add_space(4.0);
-                if ui.link("Close").clicked() {
-                    action = Some(GameOverAction::Close);
-                }
             });
         });
         // A click outside the pop-up or `Esc` closes it too.
@@ -699,7 +698,7 @@ impl ChessApp {
                     }
                 }
             });
-            if ui.button("Cancel").clicked() {
+            if widgets::wide_button(ui, true, "Cancel") {
                 self.pending_promotion = None;
                 self.selected = None;
             }

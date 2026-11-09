@@ -45,7 +45,7 @@ pub fn draw_settings(ui: &mut egui::Ui, settings: &mut Settings) -> bool {
             ui.add_space(30.0);
 
             let escape = ui.input(|input| input.key_pressed(egui::Key::Escape));
-            if ui.button(RichText::new("Back").size(20.0)).clicked() || escape {
+            if widgets::wide_button(ui, true, "Back") || escape {
                 back = true;
             }
         });

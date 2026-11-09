@@ -174,15 +174,13 @@ pub fn draw_menu(
                 if widgets::wide_button(right, true, "Settings") {
                     action = MenuAction::OpenSettings;
                 }
+                if widgets::wide_button(right, true, "Quit") {
+                    right.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                }
             });
 
             ui.add_space(24.0);
             ui.vertical_centered(|ui| {
-                // Quitting is rare, so it's a quiet link, not a big red button.
-                if ui.link("Quit").clicked() {
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
-                }
-                ui.add_space(20.0);
                 ui.weak(format!("version {}", env!("CARGO_PKG_VERSION")));
             });
         });
