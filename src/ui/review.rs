@@ -1,14 +1,16 @@
 use std::iter;
 
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, Align2, Color32, FontId, RichText, Sense, Stroke, Vec2};
 
 use crate::analysis::{self, MoveQuality, MoveReview};
 use crate::engine::Analysis;
 use crate::game::PlayedMove;
 use crate::piece::Color;
 use crate::position::Position;
+use crate::san;
 use crate::square::Square;
 use crate::ui::board_view::{BEST_MOVE_ARROW, PLAYED_MOVE_ARROW};
+use crate::ui::{theme, widgets};
 
 /// The review screen: a finished game, the engine's analysis of every position,
 /// and which move the player is looking at.
@@ -83,6 +85,21 @@ impl Review {
         }
     }
 
+    /// The squares of the move that led to the position on the board, if any.
+    pub fn last_move(&self) -> Option<(Square, Square)> {
+        let previous = self.current.checked_sub(1)?;
+        let played = self.history.get(previous)?;
+        Some((played.mv.from, played.mv.to))
+    }
+
+    /// The evaluation for White before the move being looked at, for the eval bar.
+    /// Shows 0 (equal) until the analysis is done.
+    pub fn eval(&self) -> i32 {
+        self.reviews
+            .get(self.current)
+            .map_or(0, |review| review.eval_before)
+    }
+
     /// Arrows for the board: the move played, and the engine's move if it was better.
     pub fn arrows(&self) -> Vec<(Square, Square, Color32)> {
         let mut arrows = Vec::new();
@@ -101,32 +118,53 @@ impl Review {
     /// Draws the side panel. `player` is your color against the bot, `None` in a
     /// local game. Returns true when "Main menu" is clicked.
     pub fn side_panel(&mut self, ui: &mut egui::Ui, player: Option<Color>) -> bool {
-        ui.heading("Game review");
-        let back = ui.button("Main menu").clicked();
-        ui.separator();
+        let mut back = false;
+        let ready = self.is_finished() && !self.reviews.is_empty();
 
-        if !self.is_finished() {
-            let done = self.analyses.iter().filter(|slot| slot.is_some()).count();
-            let total = self.analyses.len();
-            ui.label("Stockfish is analysing every move...");
-            ui.add(
-                egui::ProgressBar::new(done as f32 / total as f32)
-                    .text(format!("{done} / {total} positions")),
-            );
+        egui::Panel::top("review_top")
+            .frame(egui::Frame::NONE)
+            .show_separator_line(false)
+            .show(ui, |ui| {
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    ui.heading(RichText::new("Game review").size(24.0).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        back = ui.button("Main menu").clicked();
+                    });
+                });
+                ui.add_space(4.0);
+
+                if !self.is_finished() {
+                    let done = self.analyses.iter().filter(|slot| slot.is_some()).count();
+                    let total = self.analyses.len();
+                    ui.label("Stockfish is analysing every move...");
+                    ui.add(
+                        egui::ProgressBar::new(done as f32 / total as f32)
+                            .text(format!("{done} / {total} positions")),
+                    );
+                } else if self.reviews.is_empty() {
+                    ui.label("No moves were played.");
+                } else {
+                    self.summaries(ui, player);
+                    self.current_move_card(ui);
+                    ui.add_space(4.0);
+                }
+            });
+        if !ready {
             return back;
         }
-        if self.reviews.is_empty() {
-            ui.label("No moves were played.");
-            return back;
-        }
 
-        self.navigation(ui);
-        ui.separator();
-        self.current_move_details(ui);
-        ui.separator();
-        self.summaries(ui, player);
-        ui.separator();
-        self.move_list(ui);
+        egui::Panel::bottom("review_navigation")
+            .frame(egui::Frame::NONE)
+            .show_separator_line(false)
+            .show(ui, |ui| {
+                ui.add_space(4.0);
+                self.navigation(ui);
+                ui.add_space(8.0);
+            });
+        egui::CentralPanel::default()
+            .frame(egui::Frame::NONE)
+            .show(ui, |ui| self.move_list(ui));
         back
     }
 
@@ -139,45 +177,72 @@ impl Review {
                 input.key_pressed(egui::Key::ArrowRight),
             )
         });
-        ui.horizontal(|ui| {
-            if (ui.button("◀ Previous").clicked() || left) && self.current > 0 {
+        ui.columns(2, |columns| {
+            let previous = widgets::wide_button(&mut columns[0], self.current > 0, "◀ Previous");
+            if (previous || left) && self.current > 0 {
                 self.current -= 1;
             }
-            if (ui.button("Next ▶").clicked() || right) && self.current < last {
+            let next = widgets::wide_button(&mut columns[1], self.current < last, "Next ▶");
+            if (next || right) && self.current < last {
                 self.current += 1;
             }
-            ui.label("(or use ← →)");
         });
+        ui.vertical_centered(|ui| ui.weak("or use the ← → keys"));
     }
 
-    /// The move being looked at: its quality, the evaluation and the explanation.
-    fn current_move_details(&self, ui: &mut egui::Ui) {
+    /// A card about the move being looked at, with a border in its quality color:
+    /// the move, the explanation, the evaluation and the better move.
+    fn current_move_card(&self, ui: &mut egui::Ui) {
         let review = &self.reviews[self.current];
+        let color = quality_color(review.quality);
         let number = self.current / 2 + 1;
         let dots = if review.mover == Color::White {
             "."
         } else {
             "..."
         };
-        ui.label(
-            RichText::new(format!(
-                "{number}{dots} {}{}  {}",
-                review.san,
-                review.quality.symbol(),
-                review.quality.label()
-            ))
-            .size(20.0)
-            .color(quality_color(review.quality)),
-        );
-        ui.label(format!(
-            "Evaluation: {} → {}",
-            analysis::format_eval(review.eval_before),
-            analysis::format_eval(review.eval_after)
-        ));
-        ui.add(egui::Label::new(&review.explanation).wrap());
+
+        egui::Frame::new()
+            .fill(theme::card_color(ui.visuals()))
+            .stroke(Stroke::new(2.0, color))
+            .corner_radius(10)
+            .inner_margin(12)
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    badge(ui, review.quality, BADGE_SIZE);
+                    let title = format!("{number}{dots} {}{}", review.san, review.quality.symbol());
+                    ui.label(RichText::new(title).size(18.0).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.colored_label(color, review.quality.label());
+                    });
+                });
+                ui.add(egui::Label::new(&review.explanation).wrap());
+                ui.weak(format!(
+                    "Evaluation {} → {}",
+                    analysis::format_eval(review.eval_before),
+                    analysis::format_eval(review.eval_after)
+                ));
+
+                // The better move (the green arrow), in a green "pill".
+                if review.quality >= MoveQuality::Inaccuracy
+                    && let Some(best) = review.best_move
+                {
+                    let better = san::san(self.position(), best);
+                    egui::Frame::new()
+                        .fill(BEST_MOVE_ARROW.gamma_multiply(0.25))
+                        .corner_radius(6)
+                        .inner_margin(egui::Margin::symmetric(8, 3))
+                        .show(ui, |ui| {
+                            let text = RichText::new(format!("Better: {better}")).strong();
+                            ui.colored_label(quality_color(MoveQuality::Best), text);
+                        });
+                }
+            });
     }
 
-    /// Move-quality totals and advice for each player.
+    /// A card per player: the average loss as a big number, a badge with the count for each
+    /// quality, the key moments and a piece of advice.
     fn summaries(&mut self, ui: &mut egui::Ui, player: Option<Color>) {
         for color in Color::ALL {
             if player.is_some_and(|player| player != color) {
@@ -189,58 +254,126 @@ impl Review {
             } else {
                 format!("{color:?}")
             };
-            ui.strong(format!(
-                "{name}: average loss {} centipawns per move",
-                summary.average_loss
-            ));
-            ui.horizontal_wrapped(|ui| {
-                for quality in MoveQuality::ALL {
-                    let count = summary.counts[quality as usize];
-                    ui.colored_label(
-                        quality_color(quality),
-                        format!("{}: {count}", quality.label()),
-                    );
-                }
-            });
-            if !summary.worst_moves.is_empty() {
-                ui.horizontal_wrapped(|ui| {
-                    ui.label("Key moments:");
-                    for &index in &summary.worst_moves {
-                        let label = format!(
-                            "{}{}",
-                            self.reviews[index].san,
-                            self.reviews[index].quality.symbol()
-                        );
-                        if ui.link(label).clicked() {
-                            self.current = index;
-                        }
+
+            widgets::card(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    ui.vertical(|ui| {
+                        ui.weak(name);
+                        let average = RichText::new(summary.average_loss.to_string()).size(34.0);
+                        ui.label(average.strong());
+                        ui.weak("avg. loss (cp)");
+                    });
+                    // Push the five badges to the right edge of the card.
+                    let spacing = ui.spacing().item_spacing.x;
+                    let badges_width = 5.0 * BADGE_SIZE + 4.0 * spacing;
+                    ui.add_space((ui.available_width() - badges_width).max(0.0));
+                    for quality in MoveQuality::ALL {
+                        let count = summary.counts[quality as usize];
+                        // A narrow column: the badge, and the count centered under it.
+                        let size = Vec2::new(BADGE_SIZE, 2.0 * BADGE_SIZE);
+                        let layout = egui::Layout::top_down(egui::Align::Center);
+                        ui.allocate_ui_with_layout(size, layout, |ui| {
+                            badge(ui, quality, BADGE_SIZE);
+                            ui.label(count.to_string());
+                        });
                     }
                 });
-            }
-            ui.add(egui::Label::new(RichText::new(analysis::advice(&summary)).italics()).wrap());
+
+                if !summary.worst_moves.is_empty() {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.weak("Key moments:");
+                        for &index in &summary.worst_moves {
+                            let review = &self.reviews[index];
+                            let label = format!("{}{}", review.san, review.quality.symbol());
+                            if ui.link(label).clicked() {
+                                self.current = index;
+                            }
+                        }
+                    });
+                }
+                let advice = RichText::new(analysis::advice(&summary)).italics();
+                ui.add(egui::Label::new(advice).wrap());
+            });
             ui.add_space(6.0);
         }
     }
 
-    /// Every move, colored by quality. Click one to jump to it.
+    /// Every move with a dot in its quality color. Click one to jump to it.
     fn move_list(&mut self, ui: &mut egui::Ui) {
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            for (row, pair) in self.reviews.chunks(2).enumerate() {
-                ui.horizontal(|ui| {
-                    ui.monospace(format!("{:>3}.", row + 1));
-                    for (offset, review) in pair.iter().enumerate() {
-                        let index = row * 2 + offset;
-                        let text =
-                            RichText::new(format!("{}{}", review.san, review.quality.symbol()))
-                                .monospace()
-                                .color(quality_color(review.quality));
-                        if ui.selectable_label(index == self.current, text).clicked() {
-                            self.current = index;
-                        }
-                    }
+        widgets::card(ui, |ui| {
+            ui.set_min_size(ui.available_size()); // fill the space between the cards and buttons
+            egui::ScrollArea::vertical()
+                .auto_shrink(false)
+                .show(ui, |ui| {
+                    egui::Grid::new("review_moves")
+                        .num_columns(3)
+                        .show(ui, |ui| {
+                            for row in 0..self.reviews.len().div_ceil(2) {
+                                ui.weak(format!("{}.", row + 1));
+                                self.move_cell(ui, row * 2);
+                                if row * 2 + 1 < self.reviews.len() {
+                                    self.move_cell(ui, row * 2 + 1);
+                                }
+                                ui.end_row();
+                            }
+                        });
                 });
-            }
         });
+    }
+
+    /// One move in the list: a dot in its quality color, then the move. Click it to jump to it.
+    fn move_cell(&mut self, ui: &mut egui::Ui, index: usize) {
+        let review = &self.reviews[index];
+        let quality = review.quality;
+        let selected = index == self.current;
+        // Only inaccuracies and worse get colored text, like on chess sites.
+        let color = if selected {
+            theme::ON_ACCENT
+        } else if quality >= MoveQuality::Inaccuracy {
+            quality_color(quality)
+        } else {
+            ui.visuals().strong_text_color()
+        };
+        let text = RichText::new(format!("{}{}", review.san, quality.symbol()))
+            .monospace()
+            .size(15.0)
+            .color(color);
+
+        let clicked = ui
+            .horizontal(|ui| {
+                badge(ui, quality, 10.0);
+                ui.selectable_label(selected, text).clicked()
+            })
+            .inner;
+        if clicked {
+            self.current = index;
+        }
+    }
+}
+
+/// The size of the quality badges in the summary and the move card.
+const BADGE_SIZE: f32 = 26.0;
+
+/// A colored circle for a move quality, with its symbol inside when it's big enough.
+fn badge(ui: &mut egui::Ui, quality: MoveQuality, size: f32) {
+    let (rect, _) = ui.allocate_exact_size(Vec2::splat(size), Sense::hover());
+    let painter = ui.painter();
+    painter.circle_filled(rect.center(), size / 2.0, quality_color(quality));
+    if size >= 20.0 {
+        let symbol = match quality {
+            MoveQuality::Best => "★",
+            MoveQuality::Good => "✓",
+            _ => quality.symbol(),
+        };
+        let font = FontId::proportional(size * 0.5);
+        painter.text(
+            rect.center(),
+            Align2::CENTER_CENTER,
+            symbol,
+            font,
+            Color32::BLACK,
+        );
     }
 }
 

@@ -4,13 +4,13 @@ use eframe::egui::{self, ColorImage, TextureHandle, TextureId, TextureOptions};
 
 use crate::piece::{Color, Piece, PieceKind};
 
-///The images of all 12 pieces, loaded once when the app starts.
+/// The images of all 12 pieces, loaded once when the app starts.
 pub struct PieceTextures {
     textures: HashMap<Piece, TextureHandle>,
 }
 
 impl PieceTextures {
-    /// Decodes every piece image and uploars it to the graphics card.
+    /// Decodes every piece image and uploads it to the graphics card.
     pub fn load(ctx: &egui::Context) -> Result<Self, image::ImageError> {
         let mut textures = HashMap::new();
         for color in Color::ALL {

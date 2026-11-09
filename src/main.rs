@@ -9,6 +9,7 @@ mod piece;
 mod position;
 mod rules;
 mod san;
+mod settings;
 mod square;
 mod ui;
 
@@ -20,7 +21,8 @@ fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("chess-master")
-            .with_inner_size([900.0, 700.0]),
+            .with_inner_size([1100.0, 820.0])
+            .with_min_inner_size([800.0, 600.0]),
         ..Default::default()
     };
 

@@ -32,7 +32,7 @@ pub enum PieceKind {
 }
 
 impl PieceKind {
-    /// The name in lowercase, for senrences: "knight", "queen", ...
+    /// The name in lowercase, for sentences: "knight", "queen", ...
     pub fn name(self) -> &'static str {
         match self {
             PieceKind::Pawn => "pawn",
@@ -43,7 +43,19 @@ impl PieceKind {
             PieceKind::King => "king",
         }
     }
-    ///All six kind of pieces.
+    /// Returns what the piece is worth in pawns: the usual 1, 3, 3, 5, 9.
+    /// The king can't be traded, so it counts as 0.
+    pub fn value(self) -> u32 {
+        match self {
+            PieceKind::Pawn => 1,
+            PieceKind::Knight | PieceKind::Bishop => 3,
+            PieceKind::Rook => 5,
+            PieceKind::Queen => 9,
+            PieceKind::King => 0,
+        }
+    }
+
+    /// All six kinds of piece.
     pub const ALL: [PieceKind; 6] = [
         PieceKind::Pawn,
         PieceKind::Knight,
@@ -67,7 +79,7 @@ impl Piece {
         Self { color, kind }
     }
 
-    /// Reads a piece from it's letter (the reverse of a symbol): `'N'` is a white Knight
+    /// Reads a piece from its letter (the reverse of a symbol): `'N'` is a white Knight
     /// `'q'` is a black Queen. Returns `None` for any other character.
     pub fn from_symbol(symbol: char) -> Option<Piece> {
         let kind = match symbol.to_ascii_uppercase() {
@@ -107,7 +119,7 @@ impl Piece {
 }
 
 impl fmt::Display for Piece {
-    ///Shows the piece as its letter
+    /// Shows the piece as its letter.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.symbol())
     }

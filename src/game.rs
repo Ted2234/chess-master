@@ -1,7 +1,7 @@
 use std::fmt;
 
 use crate::moves::Move;
-use crate::piece::Color;
+use crate::piece::{Color, Piece, PieceKind};
 use crate::position::Position;
 use crate::rules::{self, DrawReason, GameStatus};
 use crate::san;
@@ -61,14 +61,29 @@ impl fmt::Display for MoveError {
 
 impl std::error::Error for MoveError {}
 
-/// One move from the gamne's history.
+/// One move from the game's history.
 #[derive(Debug, Clone)]
 pub struct PlayedMove {
     pub mv: Move,
-    /// The move in standard notation, e.g. `Nf3`
+    /// The move in standard notation, e.g. `Nf3`.
     pub san: String,
     /// The position just before the move was played.
     pub before: Position,
+}
+
+impl PlayedMove {
+    /// Returns the piece this move captured, if any.
+    pub fn captured(&self) -> Option<Piece> {
+        let board = &self.before.board;
+        if let Some(piece) = board.get(self.mv.to) {
+            return Some(piece);
+        }
+        // En passant: the pawn moves to an empty square and takes the pawn beside it.
+        let mover = board.get(self.mv.from)?;
+        let en_passant =
+            mover.kind == PieceKind::Pawn && Some(self.mv.to) == self.before.en_passant;
+        en_passant.then_some(Piece::new(mover.color.opposite(), PieceKind::Pawn))
+    }
 }
 
 /// A game of chess: the current position, every move played, and the result.
@@ -110,7 +125,7 @@ impl Game {
         self.result
     }
 
-    /// The lefal moves in the current position (none once the game is over).
+    /// The legal moves in the current position (none once the game is over).
     pub fn legal_moves(&self) -> Vec<Move> {
         if self.result.is_some() {
             Vec::new()
@@ -119,7 +134,7 @@ impl Game {
         }
     }
 
-    /// PLays a move if it's legal, and checks wether the game has ended.
+    /// Plays a move if it's legal, and checks whether the game has ended.
     pub fn play(&mut self, mv: Move) -> Result<(), MoveError> {
         if self.result.is_some() {
             return Err(MoveError::GameOver);
@@ -136,12 +151,24 @@ impl Game {
         Ok(())
     }
 
-    /// Takes back the last move. returns it, or `None` if no moves were played.
+    /// Takes back the last move. Returns it, or `None` if no moves were played.
     pub fn undo(&mut self) -> Option<Move> {
         let last = self.history.pop()?;
         self.position = last.before;
         self.result = None;
         Some(last.mv)
+    }
+
+    /// Returns the pieces `color` has captured so far, cheapest first.
+    pub fn captured_by(&self, color: Color) -> Vec<Piece> {
+        let mut pieces: Vec<Piece> = self
+            .history
+            .iter()
+            .filter(|played| played.before.side_to_move == color)
+            .filter_map(PlayedMove::captured)
+            .collect();
+        pieces.sort_by_key(|piece| piece.kind.value());
+        pieces
     }
 
     /// Ends the game for a reason outside the board: time ran out or a resignation.
@@ -177,7 +204,7 @@ impl Game {
 }
 
 /// What makes two positions "the same" for repetition: the pieces, the side to move, castling
-/// rights, and en passant. Thet's FEN without the two counters.
+/// rights, and en passant. That's FEN without the two counters.
 fn repetition_key(position: &Position) -> String {
     position
         .to_fen()
@@ -244,6 +271,26 @@ mod tests {
         );
         assert_eq!(game.history()[3].san, "Qh4#");
         assert!(game.legal_moves().is_empty());
+    }
+
+    #[test]
+    fn captured_pieces_are_listed() {
+        let mut game = Game::new();
+        // exd5 takes a pawn, Qxd5 takes it back.
+        play(&mut game, &["e2e4", "d7d5", "e4d5", "d8d5", "b1c3"]);
+        let white_pawn = Piece::new(Color::White, PieceKind::Pawn);
+        let black_pawn = Piece::new(Color::Black, PieceKind::Pawn);
+        assert_eq!(game.captured_by(Color::White), [black_pawn]);
+        assert_eq!(game.captured_by(Color::Black), [white_pawn]);
+    }
+
+    #[test]
+    fn en_passant_captures_a_pawn() {
+        let mut game = Game::new();
+        // e5 waits on the fifth rank; after d7-d5, exd6 takes the d-pawn en passant.
+        play(&mut game, &["e2e4", "a7a6", "e4e5", "d7d5", "e5d6"]);
+        let captured = game.history()[4].captured();
+        assert_eq!(captured, Some(Piece::new(Color::Black, PieceKind::Pawn)));
     }
 
     #[test]

@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use crate::piece::Color;
 
-///The time controls a player can choose from.
+/// The time controls a player can choose from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TimeControl {
     FiveMinutes,
@@ -30,6 +30,9 @@ impl TimeControl {
     }
 }
 
+/// Below this much time left, a clock turns red and the bot plays faster.
+pub const LOW_TIME: Duration = Duration::from_secs(20);
+
 /// A chess clock: the time left for each player.
 ///
 /// Only one side's time runs at once: the side that has the turn.
@@ -40,7 +43,7 @@ pub struct Clock {
 }
 
 impl Clock {
-    /// Create a stopped clock with the full time for each player.
+    /// Creates a stopped clock with the full time for each player.
     pub fn new(time_control: TimeControl) -> Self {
         let time = time_control.duration();
         Self {
@@ -50,7 +53,7 @@ impl Clock {
         }
     }
 
-    ///Returns how much time 'color' has left.
+    /// Returns how much time `color` has left.
     pub fn remaining(&self, color: Color) -> Duration {
         let saved = match color {
             Color::White => self.white,
@@ -77,12 +80,12 @@ impl Clock {
         }
     }
 
-    /// Returns true wjile one side's time is counting down.
+    /// Returns true while one side's time is counting down.
     pub fn is_running(&self) -> bool {
         self.running.is_some()
     }
 
-    /// returns the side whose time has run out, if any.
+    /// Returns the side whose time has run out, if any.
     pub fn flagged(&self) -> Option<Color> {
         [Color::White, Color::Black]
             .into_iter()
@@ -98,7 +101,7 @@ impl Clock {
     }
 }
 
-/// Formats a dration as `mm:ss`.
+/// Formats a duration as `mm:ss`.
 pub fn format_time(time: Duration) -> String {
     let seconds = time.as_secs();
     format!("{:02}:{:02}", seconds / 60, seconds % 60)
