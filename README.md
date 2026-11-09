@@ -80,6 +80,7 @@ The app is built step by step by following the **[lab](docs/lab/README.md)**. Ev
   - [x] Drag and drop
   - [x] Review: eval bar, badges and cards
   - [x] A pop-up when the game ends
+  - [x] Buttons that match: Quit, Close, Back, Cancel
 
 ### Part 6: Ship it
 - [x] [Lab 17: Bundle Stockfish](docs/lab/lab-17-bundle-stockfish.md): Stockfish next to the app, no console windows, version number, Linux `.tar.gz`
