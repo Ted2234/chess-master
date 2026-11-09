@@ -68,20 +68,20 @@ The app is built step by step by following the **[lab](docs/lab/README.md)**. Ev
 - [x] [Lab 15: Game analysis](docs/lab/lab-15-bot-analysis.md): every move rated, **what went wrong and the better move**, summary and advice
 
 ### Part 5: Make it look good
-- [ ] [Lab 16: Make it look good](docs/lab/lab-16-make-it-look-good.md): board themes, a **Settings screen**, dark and light mode, a new look
-  - [ ] Fix the board painting, the capture rings and the typos
-  - [ ] Board themes and a Settings screen
-  - [ ] Dark and light mode with one accent color
-  - [ ] Save the settings to a file
-  - [ ] Last move, check glow, rounded board, sharp pixels
-  - [ ] Side panel with player cards
-  - [ ] Main menu as cards, with a Random color
-  - [ ] Slide animation and the "Animate moves" setting
-  - [ ] Drag and drop
-  - [ ] Review: eval bar, badges and cards
+- [x] [Lab 16: Make it look good](docs/lab/lab-16-make-it-look-good.md): board themes, a **Settings screen**, dark and light mode, a new look
+  - [x] Fix the board painting, the capture rings and the typos
+  - [x] Board themes and a Settings screen
+  - [x] Dark and light mode with one accent color
+  - [x] Save the settings to a file
+  - [x] Last move, check glow, rounded board, sharp pixels
+  - [x] Side panel with player cards
+  - [x] Main menu as cards, with a Random color
+  - [x] Slide animation and the "Animate moves" setting
+  - [x] Drag and drop
+  - [x] Review: eval bar, badges and cards
 
 ### Part 6: Ship it
-- [ ] [Lab 17: Bundle Stockfish](docs/lab/lab-17-bundle-stockfish.md): Stockfish next to the app, no console windows, version number, Linux `.tar.gz`
+- [x] [Lab 17: Bundle Stockfish](docs/lab/lab-17-bundle-stockfish.md): Stockfish next to the app, no console windows, version number, Linux `.tar.gz`
 - [ ] Lab 18: Releases with GitHub Actions: Linux and Windows downloads for every version tag
 - [ ] Lab 19: Android: APK with Stockfish inside, portrait layout
 - [ ] Lab 20: "Update available" notice: the desktop app checks GitHub Releases at startup
