@@ -41,6 +41,40 @@ impl fmt::Display for GameResult {
     }
 }
 
+impl GameResult {
+    /// Returns the winner, or `None` for a draw.
+    pub fn winner(self) -> Option<Color> {
+        match self {
+            GameResult::Checkmate { winner }
+            | GameResult::Timeout { winner }
+            | GameResult::Resignation { winner } => Some(winner),
+            GameResult::Stalemate | GameResult::Draw(_) => None,
+        }
+    }
+
+    /// Returns how the game ended, as a short line for under the result: "by checkmate", ...
+    pub fn reason(self) -> &'static str {
+        match self {
+            GameResult::Checkmate { .. } => "by checkmate",
+            GameResult::Timeout { .. } => "on time",
+            GameResult::Resignation { .. } => "by resignation",
+            GameResult::Stalemate => "by stalemate",
+            GameResult::Draw(DrawReason::FiftyMoveRule) => "by the 50-move rule",
+            GameResult::Draw(DrawReason::InsufficientMaterial) => "not enough pieces to checkmate",
+            GameResult::Draw(DrawReason::ThreefoldRepetition) => "by threefold repetition",
+        }
+    }
+
+    /// Returns the score the way chess players write it: `1-0`, `0-1` or `½-½`.
+    pub fn score(self) -> &'static str {
+        match self.winner() {
+            Some(Color::White) => "1-0",
+            Some(Color::Black) => "0-1",
+            None => "½-½",
+        }
+    }
+}
+
 /// Why `Game::play` refused a move.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MoveError {
@@ -271,6 +305,20 @@ mod tests {
         );
         assert_eq!(game.history()[3].san, "Qh4#");
         assert!(game.legal_moves().is_empty());
+    }
+
+    #[test]
+    fn results_know_winner_reason_and_score() {
+        let mate = GameResult::Checkmate {
+            winner: Color::Black,
+        };
+        assert_eq!(mate.winner(), Some(Color::Black));
+        assert_eq!(mate.reason(), "by checkmate");
+        assert_eq!(mate.score(), "0-1");
+
+        let draw = GameResult::Draw(DrawReason::ThreefoldRepetition);
+        assert_eq!(draw.winner(), None);
+        assert_eq!(draw.score(), "½-½");
     }
 
     #[test]

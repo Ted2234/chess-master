@@ -32,6 +32,15 @@ enum Screen {
     Review,
 }
 
+/// A button on the game-over pop-up.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GameOverAction {
+    Review,
+    NewGame,
+    MainMenu,
+    Close,
+}
+
 /// What we asked the engine to do, so we know what to do with its answer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EngineJob {
@@ -76,6 +85,8 @@ pub struct ChessApp {
     review: Option<Review>,
     /// The last move and when it was played, for the slide animation.
     animation: Option<(Move, Instant)>,
+    /// True once the player has closed the game-over pop-up of this game.
+    result_closed: bool,
 }
 
 impl ChessApp {
@@ -106,6 +117,7 @@ impl ChessApp {
             hint: None,
             review: None,
             animation: None,
+            result_closed: false,
         })
     }
 
@@ -125,6 +137,7 @@ impl ChessApp {
         self.hint = None;
         self.waiting_for = None;
         self.animation = None;
+        self.result_closed = false;
         // Playing Black against the bot will flip the board so Black is at the bottom.
         self.flipped = vs_bot && self.player_color == Color::Black;
 
@@ -578,6 +591,87 @@ impl ChessApp {
 
         if self.pending_promotion.is_some() {
             self.promotion_picker(ui);
+        }
+        // Wait until the last move has finished sliding, so you see it before the pop-up.
+        if self.game.result().is_some() && !self.result_closed && self.slide().is_none() {
+            self.game_over_popup(ui);
+        }
+    }
+
+    /// A pop-up when the game ends: who won (or a draw), how, and what to do next.
+    fn game_over_popup(&mut self, ui: &mut egui::Ui) {
+        let Some(result) = self.game.result() else {
+            return;
+        };
+        let has_moves = !self.game.history().is_empty();
+        let mut action = None;
+
+        let modal = egui::Modal::new(egui::Id::unique("game_over")).show(ui.ctx(), |ui| {
+            ui.set_width(300.0);
+            ui.vertical_centered(|ui| {
+                // The winner's king, or both kings for a draw.
+                let kings: Vec<Color> = match result.winner() {
+                    Some(winner) => vec![winner],
+                    None => vec![Color::White, Color::Black],
+                };
+                let size = 64.0;
+                ui.horizontal(|ui| {
+                    let row_width = size * kings.len() as f32;
+                    ui.add_space((ui.available_width() - row_width) / 2.0);
+                    ui.spacing_mut().item_spacing.x = 0.0;
+                    for color in kings {
+                        let king = self.textures.get(Piece::new(color, PieceKind::King));
+                        ui.add(egui::Image::new(SizedTexture::new(king, Vec2::splat(size))));
+                    }
+                });
+
+                let title = match result.winner() {
+                    Some(winner) => format!("{winner:?} wins!"),
+                    None => "Draw".to_string(),
+                };
+                ui.label(RichText::new(title).size(32.0).strong());
+                // For a checkmate, also name the move that did it.
+                let reason = match (result, self.game.history().last()) {
+                    (GameResult::Checkmate { .. }, Some(last)) => {
+                        format!("{} ({})", result.reason(), last.san)
+                    }
+                    _ => result.reason().to_string(),
+                };
+                ui.label(RichText::new(reason).size(16.0));
+                ui.weak(result.score());
+                ui.add_space(12.0);
+
+                if has_moves && widgets::accent_button(ui, "Review game") {
+                    action = Some(GameOverAction::Review);
+                }
+                ui.columns(2, |columns| {
+                    if widgets::wide_button(&mut columns[0], true, "New game") {
+                        action = Some(GameOverAction::NewGame);
+                    }
+                    if widgets::wide_button(&mut columns[1], true, "Main menu") {
+                        action = Some(GameOverAction::MainMenu);
+                    }
+                });
+                ui.add_space(4.0);
+                if ui.link("Close").clicked() {
+                    action = Some(GameOverAction::Close);
+                }
+            });
+        });
+        // A click outside the pop-up or `Esc` closes it too.
+        if action.is_none() && modal.should_close() {
+            action = Some(GameOverAction::Close);
+        }
+
+        let Some(action) = action else {
+            return;
+        };
+        self.result_closed = true;
+        match action {
+            GameOverAction::Review => self.start_review(),
+            GameOverAction::NewGame => self.new_game(),
+            GameOverAction::MainMenu => self.back_to_menu(),
+            GameOverAction::Close => {}
         }
     }
 
