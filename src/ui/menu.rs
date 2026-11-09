@@ -182,6 +182,8 @@ pub fn draw_menu(
                 if ui.link("Quit").clicked() {
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
                 }
+                ui.add_space(20.0);
+                ui.weak(format!("version {}", env!("CARGO_PKG_VERSION")));
             });
         });
     });

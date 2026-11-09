@@ -1,5 +1,6 @@
 use std::fmt;
 use std::io::{self, BufRead, BufReader, Write};
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
@@ -44,11 +45,45 @@ impl SearchLimit {
     }
 }
 
+/// The file name of the Stockfish program on this platform.
+const STOCKFISH_FILE: &str = if cfg!(windows) {
+    "stockfish.exe"
+} else {
+    "stockfish"
+};
+
+/// Returns where to start Stockfish from: the copy bundled next to the app if there is one,
+/// otherwise just `stockfish`, which the system looks up on the `PATH`.
+pub fn stockfish_path() -> PathBuf {
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().and_then(bundled_stockfish))
+        .unwrap_or_else(|| PathBuf::from(STOCKFISH_FILE))
+}
+
+/// Returns the Stockfish program inside `dir`, if it's there.
+fn bundled_stockfish(dir: &Path) -> Option<PathBuf> {
+    let path = dir.join(STOCKFISH_FILE);
+    path.is_file().then_some(path)
+}
+
+/// On Windows, stops Stockfish from opening its own black console window.
+#[cfg(windows)]
+fn hide_console_window(command: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+
+/// Other systems don't open a window for a background program, so there's nothing to do.
+#[cfg(not(windows))]
+fn hide_console_window(_command: &mut Command) {}
+
 /// Everything that can go wrong while talking to the engine.
 #[derive(Debug)]
 pub enum EngineError {
-    /// The `stockfish` program couldn't be started (not installed?).
-    NotFound(io::Error),
+    /// The Stockfish program at `path` couldn't be started.
+    NotFound { path: PathBuf, error: io::Error },
     /// Reading from or writing to the engine failed.
     Io(io::Error),
     /// The engine stopped answering (it closed its output).
@@ -58,9 +93,11 @@ pub enum EngineError {
 impl fmt::Display for EngineError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            EngineError::NotFound(error) => {
-                write!(f, "could not start Stockfish ({error}). Is it installed?")
-            }
+            EngineError::NotFound { path, error } => write!(
+                f,
+                "could not start Stockfish from {} ({error}). It should be next to the app.",
+                path.display()
+            ),
             EngineError::Io(error) => write!(f, "talking to Stockfish failed: {error}"),
             EngineError::Stopped => write!(f, "Stockfish stopped unexpectedly"),
         }
@@ -86,11 +123,13 @@ pub struct Engine {
 impl Engine {
     /// Starts Stockfish and does the UCI handshake.
     pub fn start() -> Result<Self, EngineError> {
-        let mut process = Command::new("stockfish")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
+        let path = stockfish_path();
+        let mut command = Command::new(&path);
+        command.stdin(Stdio::piped()).stdout(Stdio::piped());
+        hide_console_window(&mut command);
+        let mut process = command
             .spawn()
-            .map_err(EngineError::NotFound)?;
+            .map_err(|error| EngineError::NotFound { path, error })?;
         let input = process.stdin.take().ok_or(EngineError::Stopped)?;
         let output = BufReader::new(process.stdout.take().ok_or(EngineError::Stopped)?);
 
@@ -283,6 +322,20 @@ fn run_request(engine: &mut Engine, request: EngineRequest) -> Option<EngineRepl
 mod tests {
     use super::*;
     use crate::position::START_FEN;
+
+    #[test]
+    fn finds_bundled_stockfish() {
+        let dir = std::env::temp_dir().join("chess-master-test-bundled");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(STOCKFISH_FILE);
+
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(bundled_stockfish(&dir), None);
+
+        std::fs::write(&path, "").unwrap();
+        assert_eq!(bundled_stockfish(&dir), Some(path.clone()));
+        std::fs::remove_file(&path).unwrap();
+    }
 
     #[test]
     fn parses_scores() {

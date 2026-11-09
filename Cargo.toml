@@ -6,3 +6,9 @@ edition = "2024"
 [dependencies]
 eframe = "0.37"
 image = { version = "0.25", default-features = false, features = ["png"] }
+
+# Smaller and faster builds for the downloads (`cargo build --release`).
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
