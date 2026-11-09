@@ -13,6 +13,8 @@ A chess app written in **Rust**, built as a learning project. All the chess rule
 - **Play vs the bot** (Stockfish) at a **rating you choose** (400–3000)
 - **Game review**: after a game, every move is rated and explained (what went wrong, and the better move)
 - **Chess clock** for each player: **5 min** or **10 min**
+- **Settings**: four board themes, dark or light mode, move animation (saved between runs)
+- Drag and drop or click to move, last-move highlight, player cards with captured pieces, an evaluation bar in the review
 
 ## Requirements
 
@@ -39,31 +41,50 @@ The app is built step by step by following the **[lab](docs/lab/README.md)**. Ev
 
 ### Part 1: Foundations
 - [x] [Lab 00: Setup](docs/lab/lab-00-setup.md): Rust, cargo, git, Stockfish, LazyVim
-- [ ] [Lab 01: Pieces, board and the `Display` trait](docs/lab/lab-01-pieces-and-board.md)
+- [x] [Lab 01: Pieces, board and the `Display` trait](docs/lab/lab-01-pieces-and-board.md)
   - [x] `Color` + `opposite()`, `PieceKind`
   - [x] `Piece` + `new()` + `symbol()`
   - [x] `Board`: 8×8 grid, `get`/`set`, starting position
-  - [ ] `Display` for `Piece` and `Board`, with rank and file labels
+  - [x] `Display` for `Piece` and `Board`, with rank and file labels
 
 ### Part 2: The window (local game, no rules yet)
-- [ ] [Lab 02: Your first window](docs/lab/lab-02-first-window.md): eframe, the `App` trait
-- [ ] [Lab 03: Draw the board](docs/lab/lab-03-draw-the-board.md): squares, colors, coordinates
-- [ ] [Lab 04: Draw the pieces](docs/lab/lab-04-draw-the-pieces.md): your own pixel-art pieces (Aseprite PNGs)
-- [ ] [Lab 05: Click to select and move](docs/lab/lab-05-click-to-move.md): `Square`, selection, turns
-- [ ] [Lab 06: Side panel](docs/lab/lab-06-side-panel.md): turn, New game, Flip board, move list
-- [ ] [Lab 07: Chess clock](docs/lab/lab-07-chess-clock.md): 5 / 10 min, countdown, loss on time
-- [ ] [Lab 08: Main menu](docs/lab/lab-08-main-menu.md): play a friend or the bot, time per player
+- [x] [Lab 02: Your first window](docs/lab/lab-02-first-window.md): eframe, the `App` trait
+- [x] [Lab 03: Draw the board](docs/lab/lab-03-draw-the-board.md): squares, colors, coordinates
+- [x] [Lab 04: Draw the pieces](docs/lab/lab-04-draw-the-pieces.md): your own pixel-art pieces (Aseprite PNGs)
+- [x] [Lab 05: Click to select and move](docs/lab/lab-05-click-to-move.md): `Square`, selection, turns
+- [x] [Lab 06: Side panel](docs/lab/lab-06-side-panel.md): turn, New game, Flip board, move list
+- [x] [Lab 07: Chess clock](docs/lab/lab-07-chess-clock.md): 5 / 10 min, countdown, loss on time
+- [x] [Lab 08: Main menu](docs/lab/lab-08-main-menu.md): play a friend or the bot, time per player
 
 ### Part 3: The chess rules
-- [ ] [Lab 09: Position and FEN](docs/lab/lab-09-position-and-fen.md): side to move, castling, en passant, FEN
-- [ ] [Lab 10: Piece movement](docs/lab/lab-10-piece-movement.md): how each piece moves, **dots on the available moves**, castling, en passant
-- [ ] [Lab 11: Legal moves](docs/lab/lab-11-legal-moves.md): no illegal moves, check, checkmate, stalemate, draws, promotion picker, perft tests
-- [ ] [Lab 12: Game state](docs/lab/lab-12-game-state.md): history, undo, resign, repetition, `Nf3`-style move list
+- [x] [Lab 09: Position and FEN](docs/lab/lab-09-position-and-fen.md): side to move, castling, en passant, FEN
+- [x] [Lab 10: Piece movement](docs/lab/lab-10-piece-movement.md): how each piece moves, **dots on the available moves**, castling, en passant
+- [x] [Lab 11: Legal moves](docs/lab/lab-11-legal-moves.md): no illegal moves, check, checkmate, stalemate, draws, promotion picker, perft tests
+- [x] [Lab 12: Game state](docs/lab/lab-12-game-state.md): history, undo, resign, repetition, `Nf3`-style move list
 
 ### Part 4: The bot
-- [ ] [Lab 13: Talk to Stockfish](docs/lab/lab-13-stockfish.md): UCI, background thread, hints
-- [ ] [Lab 14: Play vs the bot](docs/lab/lab-14-play-vs-bot.md): choose your color and the **bot's rating** (400–3000)
-- [ ] [Lab 15: Game analysis](docs/lab/lab-15-bot-analysis.md): every move rated, **what went wrong and the better move**, summary and advice
+- [x] [Lab 13: Talk to Stockfish](docs/lab/lab-13-stockfish.md): UCI, background thread, hints
+- [x] [Lab 14: Play vs the bot](docs/lab/lab-14-play-vs-bot.md): choose your color and the **bot's rating** (400–3000)
+- [x] [Lab 15: Game analysis](docs/lab/lab-15-bot-analysis.md): every move rated, **what went wrong and the better move**, summary and advice
+
+### Part 5: Make it look good
+- [ ] [Lab 16: Make it look good](docs/lab/lab-16-make-it-look-good.md): board themes, a **Settings screen**, dark and light mode, a new look
+  - [ ] Fix the board painting, the capture rings and the typos
+  - [ ] Board themes and a Settings screen
+  - [ ] Dark and light mode with one accent color
+  - [ ] Save the settings to a file
+  - [ ] Last move, check glow, rounded board, sharp pixels
+  - [ ] Side panel with player cards
+  - [ ] Main menu as cards, with a Random color
+  - [ ] Slide animation and the "Animate moves" setting
+  - [ ] Drag and drop
+  - [ ] Review: eval bar, badges and cards
+
+### Part 6: Ship it
+- [ ] [Lab 17: Bundle Stockfish](docs/lab/lab-17-bundle-stockfish.md): Stockfish next to the app, no console windows, version number, Linux `.tar.gz`
+- [ ] Lab 18: Releases with GitHub Actions: Linux and Windows downloads for every version tag
+- [ ] Lab 19: Android: APK with Stockfish inside, portrait layout
+- [ ] Lab 20: "Update available" notice: the desktop app checks GitHub Releases at startup
 
 ## Project Structure (planned)
 
@@ -84,12 +105,16 @@ src/
 ├── engine.rs        # Stockfish (UCI) on a background thread
 ├── bot.rs           # bot rating -> Stockfish settings
 ├── analysis.rs      # move ratings, explanations, summary
+├── settings.rs      # board theme, dark/light, animation; saved to a file
 └── ui/
     ├── app.rs            # app state, screens, side panel
-    ├── board_view.rs     # drawing the board, dots, arrows, clicks
+    ├── board_view.rs     # drawing the board, dots, arrows, clicks and drags
     ├── menu.rs           # main menu: opponent, color, rating, time
     ├── piece_textures.rs # loads the piece images
-    └── review.rs         # game review screen
+    ├── review.rs         # game review screen
+    ├── settings_screen.rs # the Settings screen
+    ├── theme.rs          # board colors, accent color, dark/light style
+    └── widgets.rs        # cards, buttons, a centered column
 ```
 
 ## Learning Resources
