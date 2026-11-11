@@ -3,6 +3,7 @@ use std::fmt;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 /// The colors of the board squares.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -185,10 +186,24 @@ impl Settings {
     }
 }
 
+/// A folder foe the settings file choosen by the app itself. Set once at startup on Android.
+/// where none of the environment variables below exist; empty everywhere else.
+static SETTINGS_FOLDER: OnceLock<PathBuf> = OnceLock::new();
+
+/// Keeps the settings file in 'folder' from now on. Only the first call counts.
+#[cfg(target_os = "android")]
+pub fn use_folder(folder: PathBuf) {
+    // set fails if a folder was already chosen; keeping the first one fine
+    let _ = SETTINGS_FOLDER.set(folder);
+}
+
 /// Returns where the settings file lives, for example
 /// `~/.config/chess-master/settings.txt` on Linux or
 /// `C:\Users\<name>\AppData\Roaming\chess-master\settings.txt` on Windows.
 fn settings_path() -> Option<PathBuf> {
+    if let Some(folder) = SETTINGS_FOLDER.get() {
+        return Some(folder.join("settings.txt"));
+    }
     let config_folder = env_path("XDG_CONFIG_HOME")
         .or_else(|| env_path("APPDATA"))
         .or_else(|| env_path("HOME").map(|home| home.join(".config")))?;

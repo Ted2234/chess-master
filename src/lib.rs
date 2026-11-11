@@ -2,6 +2,8 @@
 //! start it with [`run`]; only the window setup around it differs.
 
 mod analysis;
+#[cfg(target_os = "android")]
+mod android;
 mod board;
 mod bot;
 mod clock;
