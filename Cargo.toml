@@ -1,11 +1,24 @@
 [package]
 name = "chess-master"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 
 [dependencies]
-eframe = "0.37"
 image = { version = "0.25", default-features = false, features = ["png"] }
+
+# Desktop (Linux, Windows): eframe with all its default features.
+[target.'cfg(not(target_os = "android"))'.dependencies]
+eframe = "0.37"
+
+# Android: no screen reader support (it doesn't work with NativeActivity), no system fonts,
+# no X11/Wayland. winit gives us the `AndroidApp` type that Android starts us with.
+[target.'cfg(target_os = "android")'.dependencies]
+eframe = { version = "0.37", default-features = false, features = [
+    "android-native-activity",
+    "default_fonts",
+    "wgpu",
+] }
+winit = { version = "0.30", default-features = false }
 
 # Smaller and faster builds for the downloads (`cargo build --release`).
 [profile.release]

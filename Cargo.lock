@@ -594,10 +594,11 @@ dependencies = [
 
 [[package]]
 name = "chess-master"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "eframe",
  "image",
+ "winit",
 ]
 
 [[package]]
