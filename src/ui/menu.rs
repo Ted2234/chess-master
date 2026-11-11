@@ -115,6 +115,9 @@ impl GameSettings {
     }
 }
 
+/// Below this width (a phone held upright) the menu is one column instead of two.
+const NARROW_WIDTH: f32 = 480.0;
+
 /// Draws the main menu and returns what was clicked.
 pub fn draw_menu(
     ui: &mut egui::Ui,
@@ -157,27 +160,32 @@ pub fn draw_menu(
             });
             ui.add_space(16.0);
 
-            ui.columns(2, |columns| {
-                let [left, right] = columns else {
-                    return;
-                };
+            if ui.available_width() < NARROW_WIDTH {
+                // Everything in one column, top to bottom.
                 if settings.mode == GameMode::VsBot {
-                    color_picker(left, settings, textures);
-                    left.add_space(16.0);
-                    rating_slider(right, settings);
-                    right.add_space(20.0);
+                    color_picker(ui, settings, textures);
+                    ui.add_space(16.0);
+                    rating_slider(ui, settings);
+                    ui.add_space(16.0);
                 }
-                time_picker(left, settings);
-                if widgets::accent_button(right, "Start game") {
-                    action = MenuAction::StartGame;
-                }
-                if widgets::wide_button(right, true, "Settings") {
-                    action = MenuAction::OpenSettings;
-                }
-                if widgets::wide_button(right, true, "Quit") {
-                    right.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
-                }
-            });
+                time_picker(ui, settings);
+                ui.add_space(20.0);
+                action = menu_buttons(ui);
+            } else {
+                ui.columns(2, |columns| {
+                    let [left, right] = columns else {
+                        return;
+                    };
+                    if settings.mode == GameMode::VsBot {
+                        color_picker(left, settings, textures);
+                        left.add_space(16.0);
+                        rating_slider(right, settings);
+                        right.add_space(20.0);
+                    }
+                    time_picker(left, settings);
+                    action = menu_buttons(right);
+                });
+            }
 
             ui.add_space(24.0);
             ui.vertical_centered(|ui| {
@@ -185,6 +193,22 @@ pub fn draw_menu(
             });
         });
     });
+    action
+}
+
+/// The Start game, Settings and Quit buttons, one under the other. Returns what was clicked.
+fn menu_buttons(ui: &mut egui::Ui) -> MenuAction {
+    let mut action = MenuAction::None;
+    if widgets::accent_button(ui, "Start game") {
+        action = MenuAction::StartGame;
+    }
+    if widgets::wide_button(ui, true, "Settings") {
+        action = MenuAction::OpenSettings;
+    }
+    // Android apps don't quit themselves: the system's Back and Home buttons do that.
+    if !cfg!(target_os = "android") && widgets::wide_button(ui, true, "Quit") {
+        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+    }
     action
 }
 

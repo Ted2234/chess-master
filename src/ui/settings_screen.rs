@@ -22,7 +22,8 @@ pub fn draw_settings(ui: &mut egui::Ui, settings: &mut Settings) -> bool {
             ui.add_space(20.0);
 
             section_title(ui, "Board");
-            ui.horizontal(|ui| {
+            // On a narrow screen the previews continue on a second row.
+            ui.horizontal_wrapped(|ui| {
                 for board_theme in BoardTheme::ALL {
                     let selected = settings.board_theme == board_theme;
                     if theme_preview(ui, board_theme, selected).clicked() {

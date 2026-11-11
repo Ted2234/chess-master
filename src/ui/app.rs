@@ -23,6 +23,9 @@ use crate::ui::widgets;
 /// How long a piece takes to slide to its new square.
 const SLIDE_TIME: Duration = Duration::from_millis(160);
 
+/// How much taller than wide the window must be for the phone layout.
+const PORTRAIT_RATIO: f32 = 1.25;
+
 /// Which screen the app is showing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Screen {
@@ -465,10 +468,17 @@ impl ChessApp {
         }
 
         let mut back_to_menu = false;
-        egui::Panel::right("review_panel")
-            .resizable(false)
-            .exact_size(360.0)
-            .show(ui, |ui| back_to_menu = review.side_panel(ui, player));
+        // Upright, the analysis goes under the board and gets the height the board leaves.
+        let portrait = is_portrait(ui);
+        let panel = if portrait {
+            let height = (ui.available_height() - ui.available_width()).max(320.0);
+            egui::Panel::bottom("review_panel").exact_size(height)
+        } else {
+            egui::Panel::right("review_panel").exact_size(360.0)
+        };
+        panel.resizable(false).show(ui, |ui| {
+            back_to_menu = review.side_panel(ui, player, portrait)
+        });
 
         let position = review.position();
         let highlights = Highlights {
@@ -569,10 +579,21 @@ impl ChessApp {
             ui.ctx().request_repaint_after(Duration::from_millis(100));
         }
 
-        egui::Panel::right("side_panel")
-            .resizable(false)
-            .exact_size(320.0)
-            .show(ui, |ui| self.side_panel(ui));
+        if is_portrait(ui) {
+            // A phone held upright: one card above the board, everything else below it.
+            let (top, _) = self.card_colors();
+            egui::Panel::top("top_panel")
+                .resizable(false)
+                .show(ui, |ui| self.player_card(ui, top));
+            egui::Panel::bottom("bottom_panel")
+                .resizable(false)
+                .show(ui, |ui| self.bottom_panel(ui));
+        } else {
+            egui::Panel::right("side_panel")
+                .resizable(false)
+                .exact_size(320.0)
+                .show(ui, |ui| self.side_panel(ui));
+        }
 
         let highlights = self.highlights();
         egui::CentralPanel::default().show(ui, |ui| {
@@ -713,14 +734,19 @@ impl ChessApp {
         }
     }
 
-    /// Draws the panel on the right: a card for each player, the moves, and the buttons.
-    fn side_panel(&mut self, ui: &mut egui::Ui) {
-        // The player at the top of the board gets the top card.
-        let (top, bottom) = if self.flipped {
+    /// Returns which player's card goes above the board and which below it:
+    /// the player at the top of the board gets the top card.
+    fn card_colors(&self) -> (Color, Color) {
+        if self.flipped {
             (Color::White, Color::Black)
         } else {
             (Color::Black, Color::White)
-        };
+        }
+    }
+
+    /// Draws the panel on the right: a card for each player, the moves, and the buttons.
+    fn side_panel(&mut self, ui: &mut egui::Ui) {
+        let (top, bottom) = self.card_colors();
 
         egui::Panel::top("top_player")
             .frame(egui::Frame::NONE)
@@ -746,6 +772,50 @@ impl ChessApp {
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE)
             .show(ui, |ui| self.move_list(ui));
+    }
+
+    /// Draws the panel under the board when upright: your card, the status, the moves on
+    /// one line, and the buttons.
+    fn bottom_panel(&mut self, ui: &mut egui::Ui) {
+        let (_, bottom) = self.card_colors();
+        ui.add_space(4.0);
+        self.player_card(ui, bottom);
+        ui.add_space(4.0);
+        self.status(ui);
+        self.move_strip(ui);
+        ui.add_space(4.0);
+        self.buttons(ui);
+        ui.add_space(4.0);
+    }
+
+    /// The moves so far on one line that scrolls sideways, the newest on the right.
+    fn move_strip(&self, ui: &mut egui::Ui) {
+        let history = self.game.history();
+        egui::ScrollArea::horizontal()
+            .stick_to_right(true)
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    if history.is_empty() {
+                        ui.weak("No moves yet");
+                    }
+                    for (index, played) in history.iter().enumerate() {
+                        if index % 2 == 0 {
+                            ui.weak(format!("{}.", index / 2 + 1));
+                        }
+                        let color = if index + 1 == history.len() {
+                            theme::ACCENT
+                        } else {
+                            ui.visuals().strong_text_color()
+                        };
+                        ui.label(
+                            RichText::new(&played.san)
+                                .monospace()
+                                .size(15.0)
+                                .color(color),
+                        );
+                    }
+                });
+            });
     }
 
     /// A card for one player: their king, name, captured pieces and clock.
@@ -963,4 +1033,11 @@ impl eframe::App for ChessApp {
             Screen::Review => self.review_screen(ui),
         }
     }
+}
+
+/// Returns true when the free space is clearly taller than wide, like a phone held upright.
+/// A desktop window that is only a bit taller than wide keeps the side panel.
+fn is_portrait(ui: &egui::Ui) -> bool {
+    let size = ui.available_size();
+    size.y > size.x * PORTRAIT_RATIO
 }

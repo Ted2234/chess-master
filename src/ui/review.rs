@@ -116,8 +116,9 @@ impl Review {
     }
 
     /// Draws the side panel. `player` is your color against the bot, `None` in a
-    /// local game. Returns true when "Main menu" is clicked.
-    pub fn side_panel(&mut self, ui: &mut egui::Ui, player: Option<Color>) -> bool {
+    /// local game. `compact` is for the short panel under the board on a phone: the
+    /// summaries then scroll together with the moves. Returns true when "Main menu" is clicked.
+    pub fn side_panel(&mut self, ui: &mut egui::Ui, player: Option<Color>, compact: bool) -> bool {
         let mut back = false;
         let ready = self.is_finished() && !self.reviews.is_empty();
 
@@ -147,7 +148,9 @@ impl Review {
                 } else if self.reviews.is_empty() {
                     ui.label("No moves were played.");
                 } else {
-                    self.summaries(ui, player);
+                    if !compact {
+                        self.summaries(ui, player);
+                    }
                     self.current_move_card(ui);
                     ui.add_space(4.0);
                 }
@@ -166,7 +169,21 @@ impl Review {
             });
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE)
-            .show(ui, |ui| self.move_list(ui));
+            .show(ui, |ui| {
+                if compact {
+                    egui::ScrollArea::vertical()
+                        .auto_shrink(false)
+                        .show(ui, |ui| {
+                            self.summaries(ui, player);
+                            widgets::card(ui, |ui| {
+                                ui.set_width(ui.available_width());
+                                self.move_grid(ui);
+                            });
+                        });
+                } else {
+                    self.move_list(ui);
+                }
+            });
         back
     }
 
@@ -189,7 +206,10 @@ impl Review {
                 self.current += 1;
             }
         });
-        ui.vertical_centered(|ui| ui.weak("or use the ← → keys"));
+        // Phones have no arrow keys.
+        if !cfg!(target_os = "android") {
+            ui.vertical_centered(|ui| ui.weak("or use the ← → keys"));
+        }
     }
 
     /// A card about the move being looked at, with a border in its quality color:
@@ -307,21 +327,24 @@ impl Review {
             ui.set_min_size(ui.available_size()); // fill the space between the cards and buttons
             egui::ScrollArea::vertical()
                 .auto_shrink(false)
-                .show(ui, |ui| {
-                    egui::Grid::new("review_moves")
-                        .num_columns(3)
-                        .show(ui, |ui| {
-                            for row in 0..self.reviews.len().div_ceil(2) {
-                                ui.weak(format!("{}.", row + 1));
-                                self.move_cell(ui, row * 2);
-                                if row * 2 + 1 < self.reviews.len() {
-                                    self.move_cell(ui, row * 2 + 1);
-                                }
-                                ui.end_row();
-                            }
-                        });
-                });
+                .show(ui, |ui| self.move_grid(ui));
         });
+    }
+
+    /// The moves in rows of two, like a score sheet.
+    fn move_grid(&mut self, ui: &mut egui::Ui) {
+        egui::Grid::new("review_moves")
+            .num_columns(3)
+            .show(ui, |ui| {
+                for row in 0..self.reviews.len().div_ceil(2) {
+                    ui.weak(format!("{}.", row + 1));
+                    self.move_cell(ui, row * 2);
+                    if row * 2 + 1 < self.reviews.len() {
+                        self.move_cell(ui, row * 2 + 1);
+                    }
+                    ui.end_row();
+                }
+            });
     }
 
     /// One move in the list: a dot in its quality color, then the move. Click it to jump to it.
