@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Builds chess-master for Windows on this Linux PC and packs it together with Stockfish into target/dist/chess-master-<version>-windows-x86_64.zip
+# Builds chess-master for Windows on this Linux PC and packs it together with Stockfish into
+#   target/dist/chess-master-<version>-windows-x86_64.zip        (unzip and run)
+#   target/dist/chess-master-<version>-windows-x86_64-setup.exe  (the installer)
 set -euo pipefail
 
-# Which Stockfish release to bundle (see github.com/official-stockfish/Stockfish/releases)
+# Which Stockfish release to bundle (see github.com/official-stockfish/Stockfish/releases).
 STOCKFISH_TAG="sf_19"
-STOCKFISH_ASSETS="stockfish-windows-x86-64-universal"
+STOCKFISH_ASSET="stockfish-windows-x86-64-universal"
 TARGET="x86_64-pc-windows-gnu"
 
 cd "$(dirname "$0")/.."
@@ -13,7 +15,7 @@ NAME="chess-master-$VERSION-windows-x86_64"
 DIST="target/dist"
 CACHE="target/stockfish/$STOCKFISH_TAG"
 
-echo "Build chess-master $VERSION for Windows..."
+echo "Building chess-master $VERSION for Windows..."
 cargo build --release --locked --target "$TARGET"
 
 # Download Stockfish once; later runs reuse the copy in target/.
@@ -39,6 +41,7 @@ sed 's/$/\r/' >"$DIST/$NAME/README.txt" <<README
 chess-master $VERSION
 
 Start the game: chess-master.exe (keep stockfish.exe next to it).
+To install it with a Start menu entry, use chess-master-$VERSION-windows-x86_64-setup.exe.
 
 The chess engine is Stockfish ($STOCKFISH_TAG), included unchanged as stockfish.exe.
 Stockfish is free software under the GNU GPL v3 (see licenses\\Stockfish-COPYING.txt).
@@ -46,6 +49,14 @@ Its source code is available at
 https://github.com/official-stockfish/Stockfish/tree/$STOCKFISH_TAG
 README
 
+# 1. The zip: unpack anywhere and run.
 rm -f "$DIST/$NAME.zip"
 (cd "$DIST" && zip -q -r "$NAME.zip" "$NAME")
-echo "Done: $DIST/$NAME.zip"
+
+# 2. The installer. -NOCD: stay in the project folder, so relative paths work in the script.
+makensis -V2 -NOCD \
+  -DVERSION="$VERSION" \
+  -DSOURCE="$DIST/$NAME" \
+  -DOUTFILE="$DIST/$NAME-setup.exe" \
+  scripts/windows/installer.nsi
+echo "Done: $DIST/$NAME.zip and $DIST/$NAME-setup.exe"
