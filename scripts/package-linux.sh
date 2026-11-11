@@ -18,12 +18,12 @@ cargo build --release --locked
 
 # Download Stockfish once; later runs reuse the copy in target/.
 if [[ ! -f "$CACHE/$STOCKFISH_ASSET" ]]; then
-    echo "Downloading Stockfish ($STOCKFISH_TAG)..."
-    mkdir -p "$CACHE"
-    curl --fail --location --silent --show-error \
-        "https://github.com/official-stockfish/Stockfish/releases/download/$STOCKFISH_TAG/$STOCKFISH_ASSET.tar.gz" |
-        tar --extract --gzip --directory "$CACHE" --strip-components=1 \
-            "stockfish/$STOCKFISH_ASSET" "stockfish/Copying.txt"
+  echo "Downloading Stockfish ($STOCKFISH_TAG)..."
+  mkdir -p "$CACHE"
+  curl --fail --location --silent --show-error \
+    "https://github.com/official-stockfish/Stockfish/releases/download/$STOCKFISH_TAG/$STOCKFISH_ASSET.tar.gz" |
+    tar --extract --gzip --directory "$CACHE" --strip-components=1 \
+      "stockfish/$STOCKFISH_ASSET" "stockfish/Copying.txt"
 fi
 
 echo "Packing $NAME.tar.gz..."
@@ -32,13 +32,17 @@ mkdir -p "$DIST/$NAME/licenses"
 cp target/release/chess-master "$DIST/$NAME/"
 cp "$CACHE/$STOCKFISH_ASSET" "$DIST/$NAME/stockfish"
 cp "$CACHE/Copying.txt" "$DIST/$NAME/licenses/Stockfish-COPYING.txt"
+cp scripts/linux/install.sh scripts/linux/uninstall.sh "$DIST/$NAME/"
+cp assets/icon.png "$DIST/$NAME/chess-master.png"
 if [[ -f LICENSE ]]; then
-    cp LICENSE "$DIST/$NAME/licenses/chess-master-LICENSE.txt"
+  cp LICENSE "$DIST/$NAME/licenses/chess-master-LICENSE.txt"
 fi
-cat > "$DIST/$NAME/README.txt" <<README
+cat >"$DIST/$NAME/README.txt" <<README
 chess-master $VERSION
 
-Start the game:  ./chess-master
+Install it (adds it to your app launcher; no sudo needed): ./install.sh
+Or just start it from this folder:                         ./chess-master
+Remove it again:  ~/.local/share/chess-master/uninstall.sh
 
 The chess engine is Stockfish ($STOCKFISH_TAG), included unchanged as the program
 "stockfish" in this folder. Stockfish is free software under the GNU GPL v3

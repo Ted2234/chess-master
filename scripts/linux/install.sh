@@ -3,7 +3,7 @@
 # the app and Stockfish -> ~/.local/share/chess-master/
 # a terminal command    -> ~/.local/bin/chess-master
 # the launcher entry    -> ~/.local/share/applications/chess-master.desktop
-# the icon              -> ~/.local/share/icons/hicolor/256x256/apps/brave-cinhimbnkkaeohfgghhklpknlkffjgod-Default.png
+# the icon              -> ~/.local/share/icons/hicolor/256x256/apps/chess-master.png
 set -euo pipefail
 
 SOURCE="$(cd "$(dirname "$0")" && pwd)"
@@ -33,7 +33,7 @@ DESKTOP
 
 # Tell the desktop about the new entry icon. Not every system has these tools; that's fine.
 update-desktop-database "$DATA/applications" 2>/dev/null || true
-gtk-update-icon-cache --quiet "$DATA/icon/hicolor" 2>/dev/null || true
+gtk-update-icon-cache --quiet "$DATA/icons/hicolor" 2>/dev/null || true
 echo "Done: Start chess-master from your app launcher, or type: chess-master"
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
   echo "Note: $BIN_DIR is not on your PATH, so the terminal command won't work (the launcher will)."
