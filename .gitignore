@@ -4,3 +4,8 @@
 /CLAUDE.md
 /LEARN.md
 /docs/archive/
+/docs/lab/
+
+# Android signing keys must never be committed (they live in ~/.android).
+*.jks
+*.keystore
