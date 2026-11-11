@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What Android needs to know about the app. The version and SDK levels are added
+     by scripts/package-android.sh, so they're set in one place. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="io.github.ted2234.chessmaster">
+
+    <!-- hasCode="false": no Java code, the whole app is our Rust library.
+         extractNativeLibs="true": unpack the .so files, so Stockfish can be started. -->
+    <application
+        android:label="chess-master"
+        android:icon="@mipmap/ic_launcher"
+        android:theme="@style/AppTheme"
+        android:hasCode="false"
+        android:extractNativeLibs="true">
+
+        <!-- NativeActivity is built into Android: it loads lib<lib_name>.so and calls
+             android_main. configChanges: rotating the phone just resizes the window
+             instead of restarting the app. -->
+        <activity
+            android:name="android.app.NativeActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density">
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="chess_master" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
