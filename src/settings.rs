@@ -186,14 +186,14 @@ impl Settings {
     }
 }
 
-/// A folder foe the settings file choosen by the app itself. Set once at startup on Android.
+/// A folder for the settings file chosen by the app itself. Set once at startup on Android,
 /// where none of the environment variables below exist; empty everywhere else.
 static SETTINGS_FOLDER: OnceLock<PathBuf> = OnceLock::new();
 
-/// Keeps the settings file in 'folder' from now on. Only the first call counts.
+/// Keeps the settings file in `folder` from now on. Only the first call counts.
 #[cfg(target_os = "android")]
 pub fn use_folder(folder: PathBuf) {
-    // set fails if a folder was already chosen; keeping the first one fine
+    // `set` fails if a folder was already chosen; keeping the first one is fine.
     let _ = SETTINGS_FOLDER.set(folder);
 }
 

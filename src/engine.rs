@@ -45,9 +45,12 @@ impl SearchLimit {
     }
 }
 
-/// The file name of the Stockfish program on this platform.
+/// The file name of the Stockfish program on this platform. On Android it travels with
+/// the app's libraries, and Android only unpacks files named `lib*.so` there.
 const STOCKFISH_FILE: &str = if cfg!(windows) {
     "stockfish.exe"
+} else if cfg!(target_os = "android") {
+    "libstockfish.so"
 } else {
     "stockfish"
 };
@@ -55,10 +58,37 @@ const STOCKFISH_FILE: &str = if cfg!(windows) {
 /// Returns where to start Stockfish from: the copy bundled next to the app if there is one,
 /// otherwise just `stockfish`, which the system looks up on the `PATH`.
 pub fn stockfish_path() -> PathBuf {
-    std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().and_then(bundled_stockfish))
+    app_folder()
+        .and_then(|folder| bundled_stockfish(&folder))
         .unwrap_or_else(|| PathBuf::from(STOCKFISH_FILE))
+}
+
+/// Returns the folder the app's program is in.
+#[cfg(not(target_os = "android"))]
+fn app_folder() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    exe.parent().map(Path::to_path_buf)
+}
+
+/// On Android the app is a library, `libchess_master.so`, loaded into a Java process, so
+/// `current_exe` would name that process. `/proc/self/maps` lists every file this process
+/// has loaded; our library's folder is where Android unpacked Stockfish too.
+#[cfg(target_os = "android")]
+fn app_folder() -> Option<PathBuf> {
+    let maps = std::fs::read_to_string("/proc/self/maps").ok()?;
+    library_folder(&maps, "libchess_master.so")
+}
+
+/// Finds the folder of the file called `name` in the text of `/proc/self/maps`.
+/// Each line is `address perms offset device inode path`; the path may be missing.
+#[cfg(any(target_os = "android", test))]
+fn library_folder(maps: &str, name: &str) -> Option<PathBuf> {
+    maps.lines()
+        .filter_map(|line| line.split_whitespace().nth(5))
+        .map(Path::new)
+        .find(|path| path.file_name().is_some_and(|file| file == name))
+        .and_then(Path::parent)
+        .map(Path::to_path_buf)
 }
 
 /// Returns the Stockfish program inside `dir`, if it's there.
@@ -335,6 +365,20 @@ mod tests {
         std::fs::write(&path, "").unwrap();
         assert_eq!(bundled_stockfish(&dir), Some(path.clone()));
         std::fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn finds_library_folder_in_maps() {
+        let maps = "\
+7f0000-7f1000 r--p 00000000 fd:00 123  /system/lib64/libc.so
+7f2000-7f3000 rw-p 00000000 00:00 0
+7f4000-7f5000 r-xp 00001000 fd:05 456  /data/app/~~a1==/chess-AB==/lib/arm64/libchess_master.so
+";
+        assert_eq!(
+            library_folder(maps, "libchess_master.so"),
+            Some(PathBuf::from("/data/app/~~a1==/chess-AB==/lib/arm64"))
+        );
+        assert_eq!(library_folder(maps, "libmissing.so"), None);
     }
 
     #[test]
