@@ -16,7 +16,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     // The system we build *for*. `cfg!(windows)` would tell us the system this script
     // runs *on*, which is Linux even when cross-compiling.
     if env::var("CARGO_CFG_TARGET_OS")? == "windows" {
-        windows_resources()?;
+        // windres comes with the GNU toolchain (MinGW). Other Windows toolchains (MSVC) still
+        // build, just without the icon, instead of failing.
+        if env::var("CARGO_CFG_TARGET_ENV")? == "gnu" {
+            windows_resources()?;
+        } else {
+            println!(
+                "cargo::warning=the .exe gets no icon: that needs the GNU toolchain (windres)"
+            );
+        }
     }
     Ok(())
 }
@@ -25,6 +33,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 fn windows_resources() -> Result<(), Box<dyn Error>> {
     let out_dir = PathBuf::from(env::var("OUT_DIR")?);
     let icon = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?).join("assets/icon.ico");
+    // In a resource script `\` starts an escape (like `\n`), so a Windows path such as
+    // `C:\Users\...` would break. Windows accepts `/` too.
+    let icon = icon.display().to_string().replace('\\', "/");
     let version = env::var("CARGO_PKG_VERSION")?;
     // Windows wants the version as four numbers separated by commas: 0,2,0,0.
     let numbers = format!(
@@ -57,7 +68,6 @@ BEGIN
   END
 END
 "#,
-        icon = icon.display(),
     );
     let rc_file = out_dir.join("chess-master.rc");
     let object = out_dir.join("chess-master-resources.o");
