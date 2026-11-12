@@ -428,6 +428,9 @@ impl ChessApp {
                 }
             }
             EngineReply::Failed(error) => {
+                if let Some(review) = &mut self.review {
+                    review.engine_failed(error.clone());
+                }
                 // The engine thread has given up. Drop it; a fresh one starts when needed.
                 self.engine = None;
                 self.waiting_for = None;
@@ -474,7 +477,7 @@ impl ChessApp {
             self.screen = Screen::Menu;
             return;
         };
-        if !review.is_finished() {
+        if review.is_waiting() {
             ui.ctx().request_repaint_after(Duration::from_millis(100));
         }
 
@@ -896,7 +899,7 @@ impl ChessApp {
     }
 
     /// One line about the game (whose turn, check, the result), then engine messages.
-    fn status(&self, ui: &mut egui::Ui) {
+    fn status(&mut self, ui: &mut egui::Ui) {
         match self.game.result() {
             Some(result) => {
                 ui.label(RichText::new(result.to_string()).size(16.0).strong());
@@ -914,8 +917,11 @@ impl ChessApp {
 
         // Always exactly one line for Stockfish, even an empty one. Upright, the board is
         // centered in the space above this panel: a line coming and going would move it.
+        // (An error is the exception: it stays until you act on it, so nothing jumps.)
+        let mut try_again = false;
         if let Some(error) = &self.engine_error {
             ui.colored_label(theme::DANGER, error);
+            try_again = ui.button("Try again").clicked();
         } else if self.is_bot_turn() {
             ui.weak("The bot is thinking...");
         } else if self.waiting_for.is_some() {
@@ -927,6 +933,11 @@ impl ChessApp {
             ui.label("");
         }
         ui.add_space(4.0);
+
+        if try_again {
+            self.engine_error = None;
+            self.ensure_engine();
+        }
     }
 
     /// The buttons under your card. All buttons in a row have the same width.

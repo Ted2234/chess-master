@@ -25,6 +25,8 @@ pub struct Review {
     reviews: Vec<MoveReview>,
     /// The index of the move being looked at.
     current: usize,
+    /// Why Stockfish stopped before the analysis was done, if it did.
+    error: Option<String>,
 }
 
 impl Review {
@@ -38,6 +40,7 @@ impl Review {
             analyses: vec![None; positions],
             reviews: Vec::new(),
             current: 0,
+            error: None,
         }
     }
 
@@ -75,6 +78,16 @@ impl Review {
     /// True once the engine has answered for every position.
     pub fn is_finished(&self) -> bool {
         self.analyses.iter().all(Option::is_some)
+    }
+
+    /// True while answers are still expected: not finished, and Stockfish hasn't failed.
+    pub fn is_waiting(&self) -> bool {
+        !self.is_finished() && self.error.is_none()
+    }
+
+    /// Remembers that Stockfish stopped; no more answers will come.
+    pub fn engine_failed(&mut self, error: String) {
+        self.error = Some(error);
     }
 
     /// The position shown on the board: just before the move being looked at.
@@ -137,7 +150,12 @@ impl Review {
                 });
                 ui.add_space(4.0);
 
-                if !self.is_finished() {
+                if let Some(error) = &self.error
+                    && !self.is_finished()
+                {
+                    ui.colored_label(theme::DANGER, error);
+                    ui.label("The analysis stopped. Go back to the menu and try again.");
+                } else if !self.is_finished() {
                     let done = self.analyses.iter().filter(|slot| slot.is_some()).count();
                     let total = self.analyses.len();
                     ui.label("Stockfish is analysing every move...");
@@ -410,5 +428,45 @@ fn quality_color(quality: MoveQuality) -> Color32 {
         MoveQuality::Inaccuracy => Color32::from_rgb(230, 200, 60),
         MoveQuality::Mistake => Color32::from_rgb(240, 140, 40),
         MoveQuality::Blunder => Color32::from_rgb(230, 60, 60),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::Score;
+    use crate::game::Game;
+    use crate::moves::Move;
+
+    /// A review of the game 1. e4, with request ids starting at 10.
+    fn review_of_e4() -> Review {
+        let mut game = Game::new();
+        game.play(Move::from_uci("e2e4").unwrap()).unwrap();
+        Review::new(game.history().to_vec(), game.position().clone(), 10)
+    }
+
+    fn analysis() -> Analysis {
+        Analysis {
+            score: Score::Centipawns(20),
+            best_move: "e7e5".to_string(),
+        }
+    }
+
+    #[test]
+    fn waits_until_every_position_is_analysed() {
+        let mut review = review_of_e4();
+        assert!(review.accepts(10) && review.accepts(11) && !review.accepts(12));
+        review.store(10, analysis());
+        assert!(review.is_waiting());
+        review.store(11, analysis());
+        assert!(review.is_finished() && !review.is_waiting());
+    }
+
+    #[test]
+    fn stops_waiting_when_stockfish_fails() {
+        let mut review = review_of_e4();
+        review.engine_failed("Stockfish stopped unexpectedly".to_string());
+        assert!(!review.is_finished());
+        assert!(!review.is_waiting());
     }
 }
