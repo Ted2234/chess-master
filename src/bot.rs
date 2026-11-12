@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::engine::SearchLimit;
 
 /// The lowest rating you can choose for the bot.
@@ -6,6 +8,8 @@ pub const MIN_RATING: u32 = 400;
 pub const MAX_RATING: u32 = 3000;
 /// Stockfish can limit itself to a rating from this value up (`UCI_Elo`).
 const STOCKFISH_MIN_ELO: u32 = 1320;
+/// The bot never moves faster than this, so you can see its move coming.
+pub const MIN_MOVE_TIME: Duration = Duration::from_millis(800);
 
 /// The engine settings and thinking limit that make Stockfish play at about a rating.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -107,6 +111,7 @@ mod tests {
                 id,
                 fen: game.position().to_fen(),
                 limit: strength(rating).limit,
+                min_time: Duration::ZERO,
             });
             // In the app we never wait like this; in a test it's fine.
             let reply = loop {

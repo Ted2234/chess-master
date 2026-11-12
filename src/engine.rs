@@ -6,9 +6,6 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
-/// Searches never answer faster than this, so the bot doesn't move instantly.
-const MIN_SEARCH_TIME: Duration = Duration::from_millis(800);
-
 /// How good a position is, from the point of view of the side to move.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Score {
@@ -275,6 +272,8 @@ pub enum EngineRequest {
         id: u64,
         fen: String,
         limit: SearchLimit,
+        /// Answer no sooner than this after the request (`Duration::ZERO`: as soon as possible).
+        min_time: Duration,
     },
 }
 
@@ -338,10 +337,18 @@ fn run_request(engine: &mut Engine, request: EngineRequest) -> Option<EngineRepl
             .iter()
             .try_for_each(|(name, value)| engine.set_option(name, value))
             .map(|()| None),
-        EngineRequest::Search { id, fen, limit } => {
+        EngineRequest::Search {
+            id,
+            fen,
+            limit,
+            min_time,
+        } => {
             let started = Instant::now();
             let result = engine.search(&fen, limit);
-            thread::sleep(MIN_SEARCH_TIME.saturating_sub(started.elapsed()));
+            // Only a successful search waits; an error is reported right away.
+            if result.is_ok() {
+                thread::sleep(min_time.saturating_sub(started.elapsed()));
+            }
             result.map(|analysis| Some(EngineReply::Searched { id, analysis }))
         }
     };

@@ -375,12 +375,18 @@ impl ChessApp {
         let id = self.next_request_id;
         self.next_request_id += 1;
         self.waiting_for = Some((id, job));
+        // Only the bot pretends to think; a hint comes as fast as Stockfish finds it.
+        let min_time = match job {
+            EngineJob::BestMove => bot::MIN_MOVE_TIME,
+            EngineJob::Hint => Duration::ZERO,
+        };
 
         if let Some(engine) = &self.engine {
             engine.send(EngineRequest::Search {
                 id,
                 fen: self.game.position().to_fen(),
                 limit,
+                min_time,
             });
         }
     }
@@ -454,6 +460,7 @@ impl ChessApp {
                     id: review.first_id() + index as u64,
                     fen,
                     limit: SearchLimit::Depth(12),
+                    min_time: Duration::ZERO,
                 });
             }
         }
