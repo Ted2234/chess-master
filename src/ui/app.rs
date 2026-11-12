@@ -901,17 +901,19 @@ impl ChessApp {
             }
         }
 
-        if self.is_bot_turn() {
+        // Always exactly one line for Stockfish, even an empty one. Upright, the board is
+        // centered in the space above this panel: a line coming and going would move it.
+        if let Some(error) = &self.engine_error {
+            ui.colored_label(theme::DANGER, error);
+        } else if self.is_bot_turn() {
             ui.weak("The bot is thinking...");
         } else if self.waiting_for.is_some() {
             ui.weak("Stockfish is thinking...");
-        }
-        if let Some(hint) = self.hint {
+        } else if let Some(hint) = self.hint {
             let text = san::san(self.game.position(), hint);
             ui.label(format!("Stockfish suggests {text}"));
-        }
-        if let Some(error) = &self.engine_error {
-            ui.colored_label(theme::DANGER, error);
+        } else {
+            ui.label("");
         }
         ui.add_space(4.0);
     }
