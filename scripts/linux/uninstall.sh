@@ -9,6 +9,7 @@ rm -f "$HOME/.local/bin/chess-master" \
   "$DATA/applications/chess-master.desktop" \
   "$DATA/icons/hicolor/256x256/apps/chess-master.png"
 update-desktop-database "$DATA/applications" 2>/dev/null || true
+gtk-update-icon-cache --quiet "$DATA/icons/hicolor" 2>/dev/null || true
 
-echo "chess-master was removed"
-echo "your settings are still in ~/.config/chess-master (delete that folder too if you like)."
+echo "chess-master was removed."
+echo "Your settings are still in ${XDG_CONFIG_HOME:-$HOME/.config}/chess-master (delete that folder too if you like)."

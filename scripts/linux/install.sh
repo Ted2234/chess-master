@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs a chess-master for the current user. No sudo needed; run it again to update.
+# Installs chess-master for the current user. No sudo needed; run it again to update.
 # the app and Stockfish -> ~/.local/share/chess-master/
 # a terminal command    -> ~/.local/bin/chess-master
 # the launcher entry    -> ~/.local/share/applications/chess-master.desktop
@@ -19,12 +19,13 @@ install -D -m 644 "$SOURCE/chess-master.png" "$DATA/icons/hicolor/256x256/apps/c
 ln -sf "$APP_DIR/chess-master" "$BIN_DIR/chess-master"
 
 # The launcher entry needs the full path of the program, so it's written here, not shipped.
+# The quotes keep a path with a space in it (e.g. in $HOME) in one piece.
 cat >"$DATA/applications/chess-master.desktop" <<DESKTOP
 [Desktop Entry]
 Type=Application
 Name=chess-master
 Comment=Play chess against a friend or Stockfish
-Exec=$APP_DIR/chess-master
+Exec="$APP_DIR/chess-master"
 Icon=chess-master
 Terminal=false
 Categories=Game;BoardGame;

@@ -6,6 +6,8 @@ set -euo pipefail
 # Which Stockfish release to bundle (see github.com/official-stockfish/Stockfish/releases).
 STOCKFISH_TAG="sf_19"
 STOCKFISH_ASSET="stockfish-android-arm64-universal"
+# The download's SHA-256, as GitHub lists it for the release. Any other file is refused.
+STOCKFISH_SHA256="ebb24051aa4a222b4daaf049b882ecf1163d370c128fe02316602643f4d5e426"
 # The Android tools this script uses (installed with sdkmanager, see Lab 20).
 BUILD_TOOLS_VERSION="36.1.0"
 NDK_VERSION="29.0.14206865"
@@ -43,10 +45,14 @@ cargo rustc --release --locked --lib --target aarch64-linux-android --crate-type
 if [[ ! -f "$CACHE/$STOCKFISH_ASSET" ]]; then
   echo "Downloading Stockfish ($STOCKFISH_TAG, Android)..."
   mkdir -p "$CACHE"
-  curl --fail --location --silent --show-error \
-      "https://github.com/official-stockfish/Stockfish/releases/download/$STOCKFISH_TAG/$STOCKFISH_ASSET.tar.gz" |
-      tar --extract --gzip --directory "$CACHE" --strip-components=1 \
-      "stockfish/$STOCKFISH_ASSET" "stockfish/Copying.txt"
+  ARCHIVE="$CACHE/$STOCKFISH_ASSET.tar.gz"
+  curl --fail --location --silent --show-error --output "$ARCHIVE" \
+    "https://github.com/official-stockfish/Stockfish/releases/download/$STOCKFISH_TAG/$STOCKFISH_ASSET.tar.gz"
+  # Stop here if the file isn't exactly the expected one (damaged, or replaced by someone).
+  echo "$STOCKFISH_SHA256  $ARCHIVE" | sha256sum --check --quiet
+  tar --extract --gzip --file "$ARCHIVE" --directory "$CACHE" --strip-components=1 \
+    "stockfish/$STOCKFISH_ASSET" "stockfish/Copying.txt"
+  rm "$ARCHIVE"
 fi
 
 echo "Packing $NAME.apk..."

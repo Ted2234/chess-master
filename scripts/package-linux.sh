@@ -6,6 +6,8 @@ set -euo pipefail
 # Which Stockfish release to bundle (see github.com/official-stockfish/Stockfish/releases).
 STOCKFISH_TAG="sf_19"
 STOCKFISH_ASSET="stockfish-linux-x86-64-universal"
+# The download's SHA-256, as GitHub lists it for the release. Any other file is refused.
+STOCKFISH_SHA256="9defc0d4e55d49c65a6d042f3e571a39fcea499ade6dbe741b53b8c65e03611f"
 
 cd "$(dirname "$0")/.."
 VERSION="$(grep -m1 '^version' Cargo.toml | cut -d '"' -f 2)"
@@ -20,10 +22,14 @@ cargo build --release --locked
 if [[ ! -f "$CACHE/$STOCKFISH_ASSET" ]]; then
   echo "Downloading Stockfish ($STOCKFISH_TAG)..."
   mkdir -p "$CACHE"
-  curl --fail --location --silent --show-error \
-    "https://github.com/official-stockfish/Stockfish/releases/download/$STOCKFISH_TAG/$STOCKFISH_ASSET.tar.gz" |
-    tar --extract --gzip --directory "$CACHE" --strip-components=1 \
-      "stockfish/$STOCKFISH_ASSET" "stockfish/Copying.txt"
+  ARCHIVE="$CACHE/$STOCKFISH_ASSET.tar.gz"
+  curl --fail --location --silent --show-error --output "$ARCHIVE" \
+    "https://github.com/official-stockfish/Stockfish/releases/download/$STOCKFISH_TAG/$STOCKFISH_ASSET.tar.gz"
+  # Stop here if the file isn't exactly the expected one (damaged, or replaced by someone).
+  echo "$STOCKFISH_SHA256  $ARCHIVE" | sha256sum --check --quiet
+  tar --extract --gzip --file "$ARCHIVE" --directory "$CACHE" --strip-components=1 \
+    "stockfish/$STOCKFISH_ASSET" "stockfish/Copying.txt"
+  rm "$ARCHIVE"
 fi
 
 echo "Packing $NAME.tar.gz..."

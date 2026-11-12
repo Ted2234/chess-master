@@ -7,6 +7,8 @@ set -euo pipefail
 # Which Stockfish release to bundle (see github.com/official-stockfish/Stockfish/releases).
 STOCKFISH_TAG="sf_19"
 STOCKFISH_ASSET="stockfish-windows-x86-64-universal"
+# The download's SHA-256, as GitHub lists it for the release. Any other file is refused.
+STOCKFISH_SHA256="3c8bf1f9ea66a09350a40df4f632288285ac206d99f33ab5842c408fc30b48a7"
 TARGET="x86_64-pc-windows-gnu"
 
 cd "$(dirname "$0")/.."
@@ -25,6 +27,8 @@ if [[ ! -f "$CACHE/$STOCKFISH_ASSET.exe" ]]; then
   # unzip can't read from a pipe, so the zip is saved first.
   curl --fail --location --silent --show-error --output "$CACHE/windows.zip" \
     "https://github.com/official-stockfish/Stockfish/releases/download/$STOCKFISH_TAG/$STOCKFISH_ASSET.zip"
+  # Stop here if the file isn't exactly the expected one (damaged, or replaced by someone).
+  echo "$STOCKFISH_SHA256  $CACHE/windows.zip" | sha256sum --check --quiet
   unzip -q -o -j "$CACHE/windows.zip" "stockfish/$STOCKFISH_ASSET.exe" "stockfish/Copying.txt" -d "$CACHE"
   rm "$CACHE/windows.zip"
 fi
