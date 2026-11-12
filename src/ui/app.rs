@@ -287,6 +287,15 @@ impl ChessApp {
             eprintln!("could not play {mv}: {error}");
             return;
         }
+        // A hint belongs to the position it was asked for. After a move it's wrong, and so is
+        // a hint that is still on its way.
+        self.hint = None;
+        if self
+            .waiting_for
+            .is_some_and(|(_, job)| job == EngineJob::Hint)
+        {
+            self.waiting_for = None;
+        }
         self.animation = self
             .app_settings
             .animate_moves
