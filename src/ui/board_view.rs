@@ -318,11 +318,10 @@ fn draw_label(painter: &Painter, layout: &Layout, board_theme: BoardTheme) {
 
     for col in 0..8 {
         let square = layout.square_from_screen(col, 7);
-        let letter = (b'a' + square.file as u8) as char;
         painter.text(
             layout.square_rect(square).right_bottom() - padding,
             Align2::RIGHT_BOTTOM,
-            letter,
+            square.file_char(),
             font.clone(),
             label_color(square, board_theme),
         );

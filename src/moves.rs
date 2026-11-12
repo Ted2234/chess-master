@@ -21,10 +21,8 @@ impl Move {
             promotion: None,
         }
     }
-}
 
-impl Move {
-    /// reads a move in UCI style (`e2e4`, `e7e8q`), the format Stockfish uses.
+    /// Reads a move in UCI style (`e2e4`, `e7e8q`), the format Stockfish uses.
     pub fn from_uci(text: &str) -> Option<Move> {
         let from = Square::from_name(text.get(0..2)?)?;
         let to = Square::from_name(text.get(2..4)?)?;
@@ -79,19 +77,20 @@ pub const KING_STEPS: [(isize, isize); 8] = [
 /// Directions a rook can slide in: up, down, right, left.
 pub const ROOK_DIRECTIONS: [(isize, isize); 4] = [(1, 0), (-1, 0), (0, 1), (0, -1)];
 
-/// Directions a bichop slides in: the four diagonals.
+/// Directions a bishop slides in: the four diagonals.
 pub const BISHOP_DIRECTIONS: [(isize, isize); 4] = [(1, 1), (1, -1), (-1, 1), (-1, -1)];
 
-const PROMOTION_KINDS: [PieceKind; 4] = [
+/// The pieces a pawn can become, the strongest first.
+pub const PROMOTION_KINDS: [PieceKind; 4] = [
     PieceKind::Queen,
     PieceKind::Rook,
     PieceKind::Bishop,
     PieceKind::Knight,
 ];
 
-/// Every move the side to move can make by the movment rules of each piece.
+/// Every move the side to move can make by the movement rules of each piece.
 ///
-/// "Pseudo-legal": this doesn't check yet wether a move leaves your king in check.
+/// "Pseudo-legal": this doesn't check yet whether a move leaves your king in check.
 pub fn pseudo_legal_moves(position: &Position) -> Vec<Move> {
     let mut moves = Vec::new();
 
@@ -219,7 +218,7 @@ fn push_pawn_move(from: Square, to: Square, moves: &mut Vec<Move>) {
 /// Castling: the king moves two squares towards a rook.
 ///
 /// Here we only check the castling rights and that the squares in between are
-/// empty. The "not through check" rules come in Lab 11.
+/// empty. The "not out of or through check" rules are in `rules::is_legal`.
 fn castling_moves(position: &Position, moves: &mut Vec<Move>) {
     let us = position.side_to_move;
     let rights = position.castling;

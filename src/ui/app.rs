@@ -6,7 +6,7 @@ use crate::bot;
 use crate::clock::{self, Clock};
 use crate::engine::{EngineHandle, EngineReply, EngineRequest, SearchLimit};
 use crate::game::{Game, GameResult};
-use crate::moves::Move;
+use crate::moves::{Move, PROMOTION_KINDS};
 use crate::piece::{Color, Piece, PieceKind};
 use crate::rules;
 use crate::san;
@@ -570,7 +570,7 @@ impl ChessApp {
                 self.screen = Screen::Menu;
             }
             if let Some(error) = &self.settings_error {
-                ui.vertical_centered(|ui| ui.colored_label(egui::Color32::RED, error));
+                ui.vertical_centered(|ui| ui.colored_label(theme::DANGER, error));
             }
         });
 
@@ -723,12 +723,7 @@ impl ChessApp {
         egui::Modal::new(egui::Id::unique("promotion")).show(ui.ctx(), |ui| {
             ui.label("Promote to:");
             ui.horizontal(|ui| {
-                for kind in [
-                    PieceKind::Queen,
-                    PieceKind::Rook,
-                    PieceKind::Bishop,
-                    PieceKind::Knight,
-                ] {
+                for kind in PROMOTION_KINDS {
                     let texture = self.textures.get(Piece::new(color, kind));
                     let image = egui::load::SizedTexture::new(texture, egui::vec2(64.0, 64.0));
                     if ui.add(egui::Button::image(image)).clicked() {
@@ -1050,7 +1045,7 @@ impl eframe::App for ChessApp {
                     }
                     if let Some(error) = &self.engine_error {
                         ui.vertical_centered(|ui| {
-                            ui.colored_label(egui::Color32::RED, error);
+                            ui.colored_label(theme::DANGER, error);
                         });
                     }
                 });

@@ -3,13 +3,13 @@
 
 use eframe::egui;
 
-/// The app icon (256x256), built into the program
+/// The app icon (256x256), built into the program.
 const ICON_PNG: &[u8] = include_bytes!("../assets/icon.png");
 
 fn main() -> eframe::Result {
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("chess-master")
-        // Linux desktop match the window to it's launcher entry (and its icon) by this id.
+        // Linux desktops match the window to its launcher entry (and its icon) by this id.
         .with_app_id("chess-master")
         .with_min_inner_size([800.0, 600.0]);
     // A broken icon is not worth refusing to start over.
@@ -26,7 +26,7 @@ fn main() -> eframe::Result {
     chess_master::run(options)
 }
 
-/// Decodes the app icon for the windoe's title bar and the taskbar.
+/// Decodes the app icon for the window's title bar and the taskbar.
 fn app_icon() -> Result<egui::IconData, image::ImageError> {
     let rgba = image::load_from_memory(ICON_PNG)?.to_rgba8();
     Ok(egui::IconData {

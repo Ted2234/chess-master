@@ -4,9 +4,10 @@ use crate::position::Position;
 use crate::rules;
 use crate::square::Square;
 
-/// Writes a move in Standard Algebraic Notation, the way chess players write moves: `e4`, `Nf3`, `exd5`, `O-O`, `e8=Q`, `Qh4#`.
+/// Writes a move in Standard Algebraic Notation, the way chess players write moves:
+/// `e4`, `Nf3`, `exd5`, `O-O`, `e8=Q`, `Qh4#`.
 ///
-/// `position` is the *before* the move, and `mv` must be legal in it.
+/// `position` is the position *before* the move, and `mv` must be legal in it.
 pub fn san(position: &Position, mv: Move) -> String {
     let Some(piece) = position.board.get(mv.from) else {
         return mv.to_string(); // not a real move here; fall back to UCI.
@@ -32,7 +33,7 @@ pub fn san(position: &Position, mv: Move) -> String {
     text
 }
 
-/// Everyting exept castling: piece letter, disambiguation, capture, square, promotion.
+/// Everything except castling: piece letter, disambiguation, capture, square, promotion.
 fn piece_move_text(position: &Position, mv: Move, piece: Piece) -> String {
     let is_pawn = piece.kind == PieceKind::Pawn;
     let is_capture =
@@ -65,7 +66,7 @@ fn letter(kind: PieceKind) -> char {
 }
 
 /// When two pieces of the same kind can move to the same square, SAN adds the file they come from
-/// (`Nbd2`), or the rank if the files are equal (`R1e2`), or both if neither alone is enough (`Qh4e1`)
+/// (`Nbd2`), or the rank if the files are equal (`R1e2`), or both if neither alone is enough (`Qh4e1`).
 fn disambiguation(position: &Position, mv: Move, kind: PieceKind) -> String {
     let rivals: Vec<Square> = rules::legal_moves(position)
         .into_iter()

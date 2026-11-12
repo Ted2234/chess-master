@@ -61,16 +61,16 @@ fn is_castling(position: &Position, mv: Move) -> bool {
     is_king && mv.from.file.abs_diff(mv.to.file) == 2
 }
 
-/// True if any piece of color 'by' could capture on 'square'.
+/// True if any piece of color `by` could capture on `square`.
 ///
-/// Instead of generatingg all enemy moves, wee look outward *from* the square: "if a king stood
+/// Instead of generating all enemy moves, we look outward *from* the square: "if a king stood
 /// here, could it reach an enemy knight?" and so on.
 pub fn is_square_attacked(position: &Position, square: Square, by: Color) -> bool {
     let attacker_on = |from: Option<Square>, kind: PieceKind| {
         from.is_some_and(|from| position.board.get(from) == Some(Piece::new(by, kind)))
     };
 
-    // A white pawn attacks upwards, so it would stand  one rank *below* the square.
+    // A white pawn attacks upwards, so it would stand one rank *below* the square.
     let pawn_rank_delta = match by {
         Color::White => -1,
         Color::Black => 1,
@@ -91,7 +91,7 @@ pub fn is_square_attacked(position: &Position, square: Square, by: Color) -> boo
         || slider_attacks(position, square, by, &BISHOP_DIRECTIONS, PieceKind::Bishop)
 }
 
-/// Looks along each direction for the first piece. It attacks the square if it's on an enemy 'kind'
+/// Looks along each direction for the first piece. It attacks the square if it's an enemy `kind`
 /// (rook or bishop) or an enemy queen.
 fn slider_attacks(
     position: &Position,
@@ -115,13 +115,13 @@ fn slider_attacks(
     false
 }
 
-/// Where the king of 'color' stands.
+/// Where the king of `color` stands.
 pub fn king_square(position: &Position, color: Color) -> Option<Square> {
     let king = Some(Piece::new(color, PieceKind::King));
     Square::all().find(|&square| position.board.get(square) == king)
 }
 
-/// True if the king of 'color' is attacked.
+/// True if the king of `color` is attacked.
 pub fn is_in_check(position: &Position, color: Color) -> bool {
     king_square(position, color)
         .is_some_and(|king| is_square_attacked(position, king, color.opposite()))
@@ -148,8 +148,8 @@ pub fn status(position: &Position) -> GameStatus {
     GameStatus::Ongoing
 }
 
-/// True when only kings are left, plus at most one mishop or knight in total.
-/// cannot checkmmate with that.
+/// True when only kings are left, plus at most one bishop or knight in total:
+/// nobody can checkmate with that.
 fn has_insufficient_material(position: &Position) -> bool {
     let mut minor_pieces = 0;
     for square in Square::all() {

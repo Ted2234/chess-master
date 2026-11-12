@@ -171,7 +171,7 @@ impl Engine {
         Ok(engine)
     }
 
-    /// Changes an engine settings e.g. `set_option("Skill level", "5")`.
+    /// Changes an engine setting, e.g. `set_option("Skill Level", "5")`.
     pub fn set_option(&mut self, name: &str, value: &str) -> Result<(), EngineError> {
         self.send(&format!("setoption name {name} value {value}"))?;
         self.wait_until_ready()
@@ -371,16 +371,15 @@ mod tests {
 
     #[test]
     fn finds_bundled_stockfish() {
-        let dir = std::env::temp_dir().join("chess-master-test-bundled");
+        // The process id makes the folder unique, so two test runs at once don't collide.
+        let dir = std::env::temp_dir().join(format!("chess-master-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join(STOCKFISH_FILE);
-
-        let _ = std::fs::remove_file(&path);
         assert_eq!(bundled_stockfish(&dir), None);
 
         std::fs::write(&path, "").unwrap();
-        assert_eq!(bundled_stockfish(&dir), Some(path.clone()));
-        std::fs::remove_file(&path).unwrap();
+        assert_eq!(bundled_stockfish(&dir), Some(path));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

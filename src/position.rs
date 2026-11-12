@@ -71,16 +71,16 @@ impl Position {
 
     /// Plays a move, updating the board and everything else in the position.
     ///
-    /// `mv` must be a move generated for this position (see 'move.rs').
+    /// `mv` must be a move generated for this position (see `moves.rs`).
     pub fn make_move(&mut self, mv: Move) {
         let us = self.side_to_move;
         let Some(piece) = self.board.get(mv.from) else {
-            return; //no piece to move.
+            return; // no piece to move
         };
         let captured = self.board.get(mv.to);
         let is_pawn = piece.kind == PieceKind::Pawn;
 
-        // En passasnt: the captured pawn is next to the target square, not on it.
+        // En passant: the captured pawn is next to the target square, not on it.
         if is_pawn && Some(mv.to) == self.en_passant && captured.is_none() {
             self.board.set(Square::new(mv.from.rank, mv.to.file), None);
         }
@@ -91,7 +91,7 @@ impl Position {
             self.board.set(mv.to, Some(Piece::new(us, kind)));
         }
 
-        // Castliing: the king moves two squares, so the rook jumps over it.
+        // Castling: the king moves two squares, so the rook jumps over it.
         if piece.kind == PieceKind::King && mv.from.file.abs_diff(mv.to.file) == 2 {
             let (rook_from, rook_to) = if mv.to.file == 6 { (7, 5) } else { (0, 3) };
             let rank = mv.from.rank;

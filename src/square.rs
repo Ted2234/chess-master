@@ -1,7 +1,6 @@
 use std::fmt;
 
-/// Creates a square on the board
-/// 'rank' 0 = rank 1 (White's side)
+/// A square on the board. `rank` 0 is rank 1 (White's side), `file` 0 is the a-file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Square {
     pub rank: usize,
@@ -9,12 +8,17 @@ pub struct Square {
 }
 
 impl Square {
-    /// Creates a square from a rank and file. both 0 to 7
+    /// Creates a square from a rank and a file, both 0 to 7.
     pub fn new(rank: usize, file: usize) -> Self {
+        // Checked in debug builds and tests only: a square off the board is a bug in our code.
+        debug_assert!(
+            rank < 8 && file < 8,
+            "no square at rank {rank}, file {file}"
+        );
         Self { rank, file }
     }
 
-    /// Parses a square name like "e4". Returns `None` if it isn't a valid square
+    /// Parses a square name like `"e4"`. Returns `None` if it isn't a valid square.
     pub fn from_name(name: &str) -> Option<Square> {
         let mut chars = name.chars();
         let file_char = chars.next()?;
@@ -30,8 +34,8 @@ impl Square {
         Some(Square::new(rank, file))
     }
 
-    /// returns the square 'rank_delta' rnks up and 'file_delta' files to the fight, or None is that
-    /// would be off the board.
+    /// Returns the square `rank_delta` ranks up and `file_delta` files to the right, or `None`
+    /// if that would be off the board.
     pub fn offset(self, rank_delta: isize, file_delta: isize) -> Option<Square> {
         let rank = self.rank as isize + rank_delta;
         let file = self.file as isize + file_delta;
@@ -52,19 +56,19 @@ impl Square {
         (b'a' + self.file as u8) as char
     }
 
-    /// The rnal as a digit, `'1'` to `'8'`
+    /// The rank as a digit, `'1'` to `'8'`.
     pub fn rank_char(self) -> char {
         (b'1' + self.rank as u8) as char
     }
 
-    /// Returns true for light square
+    /// Returns true for a light square.
     pub fn is_light(self) -> bool {
         !(self.rank + self.file).is_multiple_of(2)
     }
 }
 
 impl fmt::Display for Square {
-    /// Shows the square in chess notation e.g 'e4'
+    /// Shows the square in chess notation, e.g. `e4`.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}{}", self.file_char(), self.rank_char())
     }

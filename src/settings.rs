@@ -253,9 +253,9 @@ mod tests {
 
     #[test]
     fn file_round_trip() {
-        let path = env::temp_dir()
-            .join("chess-master-test")
-            .join("settings.txt");
+        // The process id makes the folder unique, so two test runs at once don't collide.
+        let folder = env::temp_dir().join(format!("chess-master-settings-{}", std::process::id()));
+        let path = folder.join("settings.txt");
         let settings = Settings {
             board_theme: BoardTheme::Green,
             app_theme: AppTheme::Dark,
@@ -266,5 +266,6 @@ mod tests {
 
         fs::remove_file(&path).unwrap();
         assert_eq!(Settings::read_from(&path), Settings::default());
+        fs::remove_dir(&folder).unwrap();
     }
 }
