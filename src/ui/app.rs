@@ -127,11 +127,6 @@ impl ChessApp {
     /// Starts a new game with the settings from the menu.
     fn new_game(&mut self) {
         let vs_bot = self.settings.mode == GameMode::VsBot;
-        if vs_bot && !self.ensure_engine() {
-            self.screen = Screen::Menu; // can't play the bot without Stockfish.
-            return;
-        }
-
         self.player_color = self.settings.color_choice.pick();
         self.game = Game::new();
         self.selected = None;
@@ -145,13 +140,10 @@ impl ChessApp {
         self.flipped = vs_bot && self.player_color == Color::Black;
 
         if let Some(engine) = &self.engine {
-            let options = if vs_bot {
-                bot::strength(self.settings.bot_rating).options
-            } else {
-                bot::full_strength_options()
-            };
             engine.send(EngineRequest::NewGame);
-            engine.send(EngineRequest::SetOptions(options));
+            engine.send(EngineRequest::SetOptions(self.engine_options()));
+        } else if vs_bot {
+            self.ensure_engine(); // the bot needs Stockfish from the first move
         }
         self.screen = Screen::Game;
     }
@@ -333,32 +325,35 @@ impl ChessApp {
         }
     }
 
-    /// Starts Stockfish if it isn't running yet. Returns false if that failed.
-    fn ensure_engine(&mut self) -> bool {
+    /// Starts Stockfish if it isn't running yet, with the settings this game needs.
+    /// Returns at once; if Stockfish can't start, the error arrives later as a reply.
+    fn ensure_engine(&mut self) {
         if self.engine.is_none() {
-            match EngineHandle::spawn() {
-                Ok(engine) => self.engine = Some(engine),
-                Err(error) => {
-                    self.engine_error = Some(error.to_string());
-                    return false;
-                }
-            }
+            let engine = EngineHandle::spawn();
+            engine.send(EngineRequest::SetOptions(self.engine_options()));
+            self.engine = Some(engine);
         }
-        true
+    }
+
+    /// The engine settings for this game: the bot's strength, or full strength for hints.
+    fn engine_options(&self) -> Vec<(String, String)> {
+        match self.settings.mode {
+            GameMode::VsBot => bot::strength(self.settings.bot_rating).options,
+            GameMode::Local => bot::full_strength_options(),
+        }
     }
 
     /// Asks Stockfish for the best move in the current position.
     fn request_hint(&mut self) {
-        if !self.ensure_engine() {
-            return;
-        }
+        self.ensure_engine();
         self.hint = None;
         self.search(EngineJob::Hint, SearchLimit::Millis(500));
     }
 
     /// If it's the bot's turn and it isn't thinking yet, asks it for a move.
     fn start_bot_move(&mut self) {
-        if !self.is_bot_turn() || self.waiting_for.is_some() {
+        // No engine means Stockfish failed: don't start it again by itself every frame.
+        if !self.is_bot_turn() || self.waiting_for.is_some() || self.engine.is_none() {
             return;
         }
         let mut limit = bot::strength(self.settings.bot_rating).limit;
@@ -433,6 +428,8 @@ impl ChessApp {
                 }
             }
             EngineReply::Failed(error) => {
+                // The engine thread has given up. Drop it; a fresh one starts when needed.
+                self.engine = None;
                 self.waiting_for = None;
                 self.engine_error = Some(error);
             }
@@ -441,9 +438,7 @@ impl ChessApp {
 
     /// Sends every position of the finished game to Stockfish and opens the review screen.
     fn start_review(&mut self) {
-        if !self.ensure_engine() {
-            return;
-        }
+        self.ensure_engine();
         let review = Review::new(
             self.game.history().to_vec(),
             self.game.position().clone(),

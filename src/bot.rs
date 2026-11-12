@@ -93,8 +93,8 @@ mod tests {
         use crate::moves::Move;
         use crate::piece::Color;
 
-        let white = EngineHandle::spawn().unwrap();
-        let black = EngineHandle::spawn().unwrap();
+        let white = EngineHandle::spawn();
+        let black = EngineHandle::spawn();
         white.send(EngineRequest::SetOptions(strength(600).options));
         black.send(EngineRequest::SetOptions(strength(2000).options));
 

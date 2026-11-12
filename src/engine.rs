@@ -291,16 +291,25 @@ pub struct EngineHandle {
 }
 
 impl EngineHandle {
-    /// Starts Stockfish and a thread that runs it.
-    pub fn spawn() -> Result<Self, EngineError> {
-        // Start the engine here, so an error (e.g. not installed) is reported right away.
-        let mut engine = Engine::start()?;
-
+    /// Starts a thread that starts Stockfish and then runs the jobs sent to it.
+    ///
+    /// Returns at once: Stockfish needs a moment to start (it loads its neural network), and
+    /// the window must never wait. Jobs sent in the meantime wait in the channel. If Stockfish
+    /// can't be started, the thread answers `EngineReply::Failed` and stops.
+    pub fn spawn() -> Self {
         let (request_sender, request_receiver) = mpsc::channel::<EngineRequest>();
         let (reply_sender, reply_receiver) = mpsc::channel::<EngineReply>();
 
-        // `move` gives the thread ownership of `engine` and the channel ends it uses.
+        // `move` gives the thread ownership of the channel ends it uses.
         thread::spawn(move || {
+            let mut engine = match Engine::start() {
+                Ok(engine) => engine,
+                Err(error) => {
+                    // If nobody is listening anymore, there's nobody to tell.
+                    let _ = reply_sender.send(EngineReply::Failed(error.to_string()));
+                    return;
+                }
+            };
             // The loop ends when the EngineHandle (the sender) is dropped.
             for request in request_receiver {
                 if let Some(reply) = run_request(&mut engine, request)
@@ -311,10 +320,10 @@ impl EngineHandle {
             }
         });
 
-        Ok(EngineHandle {
+        EngineHandle {
             requests: request_sender,
             replies: reply_receiver,
-        })
+        }
     }
 
     /// Hands a job to the engine thread. Returns immediately.
