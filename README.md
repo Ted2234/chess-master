@@ -15,7 +15,7 @@
 
 chess-master is a learning project: it was built step by step to learn Rust, from an empty window to an installable app. **All the chess rules are written from scratch** (no chess library). Stockfish is used only as an opponent and as a coach.
 
-> **Status:** version 0.2.0, playable on Linux and Windows. Android is next (see the [Roadmap](#roadmap)).
+> **Status:** version 0.2.0, playable on Linux, Windows and Android (see the [Roadmap](#roadmap)).
 
 ## Screenshots
 
@@ -99,6 +99,12 @@ The download includes **Stockfish** too.
 
 Windows may say **"Windows protected your PC"**, because the app isn't signed with a paid certificate. Click **More info > Run anyway**.
 
+## Install (Android 10 or newer, 64-bit)
+
+Download `chess-master-<version>-android-arm64.apk` on your phone and open it. Android asks you to allow installs from that source the first time. Stockfish is inside the app.
+
+Held upright, the app uses a phone layout: the board on top, your card and the buttons below it. The phone's **Back** button closes the Settings screen and pop-ups.
+
 ## Build from source
 
 You need:
@@ -123,6 +129,7 @@ cargo clippy                  # lints (kept warning-free)
 cargo fmt                     # formatting
 ./scripts/package-linux.sh    # release build + Stockfish -> target/dist/chess-master-<version>-linux-x86_64.tar.gz
 ./scripts/package-windows.sh  # Windows build on Linux (needs mingw-w64-gcc and nsis) -> .zip + setup.exe
+./scripts/package-android.sh  # signed APK (needs the Android SDK + NDK and a signing key)
 ```
 
 ## How it works
@@ -139,15 +146,19 @@ assets/
 ├── icon.png            # app icon
 ├── icon.ico            # the same icon for the Windows .exe
 └── pieces/             # 32x32 pixel-art piece images (drawn in Aseprite)
+android/                # the Android manifest and theme
 build.rs                # Windows only: puts the icon and version details into the .exe
 docs/screenshots/       # the pictures in this README
 scripts/
 ├── package-linux.sh    # builds the Linux download (app + Stockfish)
 ├── package-windows.sh  # builds the Windows .zip and setup.exe on Linux
+├── package-android.sh  # builds the signed Android APK
 ├── linux/              # install.sh / uninstall.sh, shipped in the download
 └── windows/            # installer.nsi, the setup.exe script (NSIS)
 src/
-├── main.rs             # entry point: opens the window
+├── main.rs             # desktop entry point: opens the window
+├── lib.rs              # the app as a library, started by main.rs and by Android
+├── android.rs          # Android only: start-up, Back button, system bars
 ├── piece.rs            # Color, PieceKind, Piece
 ├── board.rs            # 8x8 board
 ├── square.rs           # Square (rank + file)
@@ -184,7 +195,7 @@ Built in steps: the window first, then the chess rules, then the Stockfish bot, 
 - [x] Linux package with Stockfish bundled
 - [x] Linux installer: app launcher entry, icon, uninstaller
 - [x] Windows: `.exe` and a `setup.exe` installer with Stockfish
-- [ ] Android: APK with Stockfish inside, portrait layout
+- [x] Android: APK with Stockfish inside, portrait layout
 - [ ] Releases with GitHub Actions: Linux, Windows and Android downloads for every version tag
 - [ ] "Update available" notice: the desktop app checks GitHub Releases at startup
 
