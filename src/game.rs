@@ -239,13 +239,36 @@ impl Game {
 
 /// What makes two positions "the same" for repetition: the pieces, the side to move, castling
 /// rights, and en passant. That's FEN without the two counters.
+///
+/// The en passant square only counts if a pawn can really capture there; FEN writes it
+/// after every double pawn push.
 fn repetition_key(position: &Position) -> String {
+    let mut position = position.clone();
+    if !can_capture_en_passant(&position) {
+        position.en_passant = None;
+    }
     position
         .to_fen()
         .split_whitespace()
         .take(4)
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// True if the side to move has a legal en passant capture.
+fn can_capture_en_passant(position: &Position) -> bool {
+    let Some(target) = position.en_passant else {
+        return false;
+    };
+    // The square behind a pawn that just moved two squares is empty, so the only way a pawn
+    // can get there is by taking en passant.
+    rules::legal_moves(position).iter().any(|mv| {
+        mv.to == target
+            && position
+                .board
+                .get(mv.from)
+                .is_some_and(|piece| piece.kind == PieceKind::Pawn)
+    })
 }
 
 #[cfg(test)]
@@ -339,6 +362,30 @@ mod tests {
         play(&mut game, &["e2e4", "a7a6", "e4e5", "d7d5", "e5d6"]);
         let captured = game.history()[4].captured();
         assert_eq!(captured, Some(Piece::new(Color::Black, PieceKind::Pawn)));
+    }
+
+    #[test]
+    fn repetition_ignores_an_en_passant_square_nobody_can_use() {
+        let mut game = Game::new();
+        // After 1. e4 the FEN says "e3", but no black pawn can take en passant, so the
+        // position is the same as after the knights have gone out and back twice.
+        let out_and_back = ["g8f6", "g1f3", "f6g8", "f3g1"];
+        play(&mut game, &["e2e4"]);
+        play(&mut game, &out_and_back);
+        assert_eq!(game.result(), None); // seen twice
+        play(&mut game, &out_and_back);
+        assert_eq!(
+            game.result(),
+            Some(GameResult::Draw(DrawReason::ThreefoldRepetition))
+        );
+    }
+
+    #[test]
+    fn en_passant_counts_only_when_a_pawn_can_take() {
+        let can_take: Position = "k7/8/8/3pP3/8/8/8/K7 w - d6 0 1".parse().unwrap();
+        assert!(can_capture_en_passant(&can_take));
+        let no_pawn: Position = "k7/8/8/3p4/8/8/8/K7 w - d6 0 1".parse().unwrap();
+        assert!(!can_capture_en_passant(&no_pawn));
     }
 
     #[test]

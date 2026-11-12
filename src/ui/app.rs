@@ -552,6 +552,9 @@ impl ChessApp {
         }
         if let Some(loser) = self.clock.flagged() {
             self.clock.stop();
+            // A promotion picker still open can't be used any more.
+            self.pending_promotion = None;
+            self.selected = None;
             self.game.end(GameResult::Timeout {
                 winner: loser.opposite(),
             });
