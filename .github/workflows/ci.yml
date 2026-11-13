@@ -1,0 +1,35 @@
+# Checks every push to main and every pull request: formatting, links (for Linux, Android, and Windows) and tests. A red cross on Github means one of them failed.
+name: CI
+
+on: 
+  push:
+    branches: [main]
+  pull_requests:
+
+# This workflow only reads the code.
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: fmt, clippy, test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Rust and the extra targets
+        run: | 
+          rustup update stable
+          rustup default stable 
+          rustup component add rustfmt clippy
+          rustup target add aarch64-linux-android x86_64-pc-windows-gnu
+
+      # build.rs runs windres when checking the Windows target
+      - name: MinGW for Windows check
+        run: sudo apt-get update && sudo apt-get install --yes mingw-w64
+
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets -- --deny warnings
+      - run: cargo clippy --locked --lib --target aarch64-linux-android -- --deny warnings
+      - run: cargo clippy --locked --target x86_64-pc-windows-gnu -- --deny warnings
+      - run: cargo test --locked
