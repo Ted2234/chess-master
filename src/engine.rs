@@ -94,9 +94,10 @@ fn bundled_stockfish(dir: &Path) -> Option<PathBuf> {
     path.is_file().then_some(path)
 }
 
-/// On Windows, stops Stockfish from opening its own black console window.
+/// On Windows, stops a program we start (Stockfish, curl) from opening its own black console
+/// window.
 #[cfg(windows)]
-fn hide_console_window(command: &mut Command) {
+pub(crate) fn hide_console_window(command: &mut Command) {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     command.creation_flags(CREATE_NO_WINDOW);
@@ -104,7 +105,7 @@ fn hide_console_window(command: &mut Command) {
 
 /// Other systems don't open a window for a background program, so there's nothing to do.
 #[cfg(not(windows))]
-fn hide_console_window(_command: &mut Command) {}
+pub(crate) fn hide_console_window(_command: &mut Command) {}
 
 /// Everything that can go wrong while talking to the engine.
 #[derive(Debug)]

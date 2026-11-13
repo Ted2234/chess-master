@@ -17,6 +17,7 @@ mod san;
 mod settings;
 mod square;
 mod ui;
+mod update;
 
 use ui::app::ChessApp;
 

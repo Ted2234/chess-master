@@ -10,6 +10,7 @@ use crate::piece::{Color, Piece, PieceKind};
 use crate::ui::piece_textures::PieceTextures;
 use crate::ui::theme;
 use crate::ui::widgets;
+use crate::update::{self, Version};
 
 /// The width of the menu, centered in the window.
 const MENU_WIDTH: f32 = 560.0;
@@ -118,11 +119,13 @@ impl GameSettings {
 /// Below this width (a phone held upright) the menu is one column instead of two.
 const NARROW_WIDTH: f32 = 480.0;
 
-/// Draws the main menu and returns what was clicked.
+/// Draws the main menu and returns what was clicked. `new_version` is a newer release, if the
+/// update check found one.
 pub fn draw_menu(
     ui: &mut egui::Ui,
     settings: &mut GameSettings,
     textures: &PieceTextures,
+    new_version: Option<Version>,
 ) -> MenuAction {
     let mut action = MenuAction::None;
     let piece = |color, kind| textures.get(Piece::new(color, kind));
@@ -190,6 +193,12 @@ pub fn draw_menu(
             ui.add_space(24.0);
             ui.vertical_centered(|ui| {
                 ui.weak(format!("version {}", env!("CARGO_PKG_VERSION")));
+                if let Some(version) = new_version {
+                    ui.hyperlink_to(
+                        format!("Version {version} is available: download it"),
+                        update::RELEASES_PAGE,
+                    );
+                }
             });
         });
     });

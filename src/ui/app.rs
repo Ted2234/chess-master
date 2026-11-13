@@ -1,3 +1,4 @@
+use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::{Duration, Instant};
 
 use eframe::egui::{self, Color32, RichText, Vec2, load::SizedTexture};
@@ -19,6 +20,7 @@ use crate::ui::review::Review;
 use crate::ui::settings_screen;
 use crate::ui::theme;
 use crate::ui::widgets;
+use crate::update::{self, Version};
 
 /// How long a piece takes to slide to its new square.
 const SLIDE_TIME: Duration = Duration::from_millis(160);
@@ -90,6 +92,10 @@ pub struct ChessApp {
     animation: Option<(Move, Instant)>,
     /// True once the player has closed the game-over pop-up of this game.
     result_closed: bool,
+    /// The update check running in the background; it answers only with a newer version.
+    update_check: Receiver<Version>,
+    /// A newer version of chess-master, once the update check has found one.
+    new_version: Option<Version>,
 }
 
 impl ChessApp {
@@ -121,6 +127,8 @@ impl ChessApp {
             review: None,
             animation: None,
             result_closed: false,
+            update_check: update::check_in_background(),
+            new_version: None,
         })
     }
 
@@ -1032,10 +1040,19 @@ impl ChessApp {
 impl eframe::App for ChessApp {
     /// Called every frame to draw the window.
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // The update check answers once at most. While it may still answer, look again every
+        // second, even if nothing else happens on the screen.
+        match self.update_check.try_recv() {
+            Ok(version) => self.new_version = Some(version),
+            Err(TryRecvError::Empty) => ui.ctx().request_repaint_after(Duration::from_secs(1)),
+            Err(TryRecvError::Disconnected) => {} // the check is over
+        }
+
         match self.screen {
             Screen::Menu => {
                 egui::CentralPanel::default().show(ui, |ui| {
-                    match menu::draw_menu(ui, &mut self.settings, &self.textures) {
+                    match menu::draw_menu(ui, &mut self.settings, &self.textures, self.new_version)
+                    {
                         MenuAction::StartGame => {
                             self.engine_error = None;
                             self.new_game();
