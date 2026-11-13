@@ -20,7 +20,7 @@
 
 chess-master is a learning project: it was built step by step to learn Rust, from an empty window to an installable app. **All the chess rules are written from scratch** (no chess library). Stockfish is used only as an opponent and as a coach.
 
-> **Status:** version 0.2.0, playable on Linux, Windows and Android (see the [Roadmap](#roadmap)).
+> **Status:** version 0.3.0, playable on Linux, Windows and Android (see the [Roadmap](#roadmap)).
 
 ## Screenshots
 
@@ -46,6 +46,7 @@ chess-master is a learning project: it was built step by step to learn Rust, fro
 - **Player cards** with the clock, captured pieces and the material difference.
 - The **move list** in standard notation (`e4`, `Nf3`, `O-O`, `e8=Q+`) and the position as FEN, ready to copy.
 - A **game-over pop-up**: who won, how, and the score (`1-0`, `0-1`, `½-½`).
+- **Update notice** (Linux and Windows): when a newer version is released, the main menu says so, with a link to the download. At start-up the app asks GitHub once which version is the latest (with `curl`); nothing else is sent, and without internet it simply shows nothing.
 
 ### Chess rules (written by hand)
 - Every piece's movement, including **castling**, **en passant** and **promotion** (you pick the piece).
@@ -212,7 +213,7 @@ Built in steps: the window first, then the chess rules, then the Stockfish bot, 
 - [x] Windows: `.exe` and a `setup.exe` installer with Stockfish
 - [x] Android: APK with Stockfish inside, portrait layout
 - [x] Releases with GitHub Actions: Linux, Windows and Android downloads for every version tag
-- [ ] "Update available" notice: the desktop app checks GitHub Releases at startup
+- [x] "Update available" notice: the desktop app checks GitHub Releases at startup
 
 ## Learning Rust with this project
 
