@@ -5,6 +5,12 @@
 <h1 align="center">chess-master</h1>
 
 <p align="center">
+  <a href="https://github.com/Ted2234/chess-master/releases/latest"> <b>Download</b> </a> .
+  <a href="https://github.com/Ted2234/chess-master/actions/workflows/ci.yml"><img src="https://github.com/Ted2234/chess-master/actions/workflows/ci.yml/badge.svg" alt="CI status" align="center"></a>
+
+</p>
+
+<p align="center">
   A desktop chess app written in <b>Rust</b>: play a friend or the <b>Stockfish</b> bot,<br>
   then let the engine review your game and explain your mistakes.
 </p>
@@ -94,16 +100,25 @@ Don't want to install? Just run `./chess-master` inside the unpacked folder.
 
 The download includes **Stockfish** too.
 
-- **Installer:** run `chess-master-<version>-windows-x86_64-setup.exe`. It installs for your user only (no admin rights) into `%LOCALAPPDATA%\Programs\chess-master`, adds a Start menu entry and, if you tick it, a desktop shortcut. Remove it in **Settings > Apps**; your settings are kept.
+**Installer:** download `chess-master-<version>-windows-x*6_64-setup.exe` from the [**latest release**](https://github.com/Ted2234/chess-master/releases/latest) and run it.
+It installs for your user only (no admin rights) into `%LOCALAPPDATA%\Programs\chess-master`, adds a Start menu entry and, if you tick it a desktop shortcut. Remove it in **Settings > Apps**; your settings are kept.
 - **Or the zip:** unpack `chess-master-<version>-windows-x86_64.zip` anywhere and run `chess-master.exe` (keep `stockfish.exe` next to it).
 
 Windows may say **"Windows protected your PC"**, because the app isn't signed with a paid certificate. Click **More info > Run anyway**.
 
 ## Install (Android 10 or newer, 64-bit)
 
-Download `chess-master-<version>-android-arm64.apk` on your phone and open it. Android asks you to allow installs from that source the first time. Stockfish is inside the app.
+Download `chess-master-<version>-android-arm64.apk` from the [**latest release**](https://github.com/Ted2234/chess-master/releases/latest) on your phone and open it. Android asks you to allow installs from that source the first time. Stockfish is inside the app.
 
 Held upright, the app uses a phone layout: the board on top, your card and the buttons below it. The phone's **Back** button closes the Settings screen and pop-ups.
+
+## Check a download (optional)
+
+Every release has `SHA256SUMS.txt` with the checksum of each file. In the folder with your download:
+
+```sh
+sha256sum -- check --ignore-missing SHA256SUMS.txt 
+```
 
 ## Build from source
 
