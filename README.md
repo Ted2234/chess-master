@@ -5,9 +5,8 @@
 <h1 align="center">chess-master</h1>
 
 <p align="center">
-  <a href="https://github.com/Ted2234/chess-master/releases/latest"> <b>Download</b> </a> .
+  <a href="https://github.com/Ted2234/chess-master/releases/latest"><b>Download</b></a> ·
   <a href="https://github.com/Ted2234/chess-master/actions/workflows/ci.yml"><img src="https://github.com/Ted2234/chess-master/actions/workflows/ci.yml/badge.svg" alt="CI status" align="center"></a>
-
 </p>
 
 <p align="center">
@@ -81,7 +80,7 @@ From **1320** up, Stockfish limits its own strength with its built-in `UCI_Elo` 
 
 The download includes **Stockfish**, so there is nothing else to install.
 
-1. Download `chess-master-<version>-linux-x86_64.tar.gz` from the **Releases** page.
+1. Download `chess-master-<version>-linux-x86_64.tar.gz` from the [**latest release**](https://github.com/Ted2234/chess-master/releases/latest).
 2. Unpack it and run the installer (no `sudo` needed):
 
    ```sh
@@ -100,8 +99,7 @@ Don't want to install? Just run `./chess-master` inside the unpacked folder.
 
 The download includes **Stockfish** too.
 
-**Installer:** download `chess-master-<version>-windows-x*6_64-setup.exe` from the [**latest release**](https://github.com/Ted2234/chess-master/releases/latest) and run it.
-It installs for your user only (no admin rights) into `%LOCALAPPDATA%\Programs\chess-master`, adds a Start menu entry and, if you tick it a desktop shortcut. Remove it in **Settings > Apps**; your settings are kept.
+- **Installer:** download `chess-master-<version>-windows-x86_64-setup.exe` from the [**latest release**](https://github.com/Ted2234/chess-master/releases/latest) and run it. It installs for your user only (no admin rights) into `%LOCALAPPDATA%\Programs\chess-master`, adds a Start menu entry and, if you tick it, a desktop shortcut. Remove it in **Settings > Apps**; your settings are kept.
 - **Or the zip:** unpack `chess-master-<version>-windows-x86_64.zip` anywhere and run `chess-master.exe` (keep `stockfish.exe` next to it).
 
 Windows may say **"Windows protected your PC"**, because the app isn't signed with a paid certificate. Click **More info > Run anyway**.
@@ -117,8 +115,10 @@ Held upright, the app uses a phone layout: the board on top, your card and the b
 Every release has `SHA256SUMS.txt` with the checksum of each file. In the folder with your download:
 
 ```sh
-sha256sum -- check --ignore-missing SHA256SUMS.txt 
+sha256sum --check --ignore-missing SHA256SUMS.txt
 ```
+
+`OK` means the file is exactly the one GitHub Actions built.
 
 ## Build from source
 
@@ -130,7 +130,7 @@ You need:
 # Arch / CachyOS
 sudo pacman -S stockfish
 
-git clone https://github.com/<your-github-user>/chess-master.git
+git clone https://github.com/Ted2234/chess-master.git
 cd chess-master
 cargo run --release
 ```
@@ -211,7 +211,7 @@ Built in steps: the window first, then the chess rules, then the Stockfish bot, 
 - [x] Linux installer: app launcher entry, icon, uninstaller
 - [x] Windows: `.exe` and a `setup.exe` installer with Stockfish
 - [x] Android: APK with Stockfish inside, portrait layout
-- [ ] Releases with GitHub Actions: Linux, Windows and Android downloads for every version tag
+- [x] Releases with GitHub Actions: Linux, Windows and Android downloads for every version tag
 - [ ] "Update available" notice: the desktop app checks GitHub Releases at startup
 
 ## Learning Rust with this project
